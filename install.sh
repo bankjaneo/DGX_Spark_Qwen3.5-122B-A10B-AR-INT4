@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# install.sh — automated build pipeline for DGX_Spark Qwen3.5-122B v2 (Steps 0-4).
+# install.sh — automated build pipeline for DGX_Spark Qwen3.5-397B v2 (Steps 0-4).
 #
 # Walks through the Quick Start of README.md from a fresh clone:
-#   0. Download Intel/Qwen3.5-122B-A10B-int4-AutoRound (~75 GB if not cached)
-#   1. Build hybrid INT4+FP8 checkpoint               (~20 min, +9% perf, optional)
+#   0. Download Intel/Qwen3.5-397B-A17B-int4-AutoRound (~226 GB if not cached)
+#   1. Build hybrid INT4+FP8 checkpoint               (~40 min, optional)
 #   2. Add MTP speculative decoding weights
 #   3. Build base vLLM image for SM121                (~30-60 min, runs Docker)
 #   4. Build vllm-qwen35-v2 final image
@@ -34,7 +34,7 @@ set -euo pipefail
 # ── Paths ─────────────────────────────────────────────────────────────────────
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SPARK_VLLM_DIR="${PROJECT_DIR}/spark-vllm-docker"
-HYBRID_DIR="${HOME}/models/qwen35-122b-hybrid-int4fp8"
+HYBRID_DIR="${HOME}/models/qwen35-397b-hybrid-int4fp8"
 SPARK_VLLM_PIN="49d6d9fefd7cd05e63af8b28e4b514e9d30d249f"
 
 # Frozen PyTorch nightly versions — these MUST be identical to what's inside
@@ -189,10 +189,10 @@ if [ -f "${PROJECT_DIR}/patches/01-hybrid-int4-fp8/build-hybrid-checkpoint.py" ]
     present=1
 fi
 have_check "project files at ${PROJECT_DIR}/{patches,docker}" "$present" \
-    "Run install.sh from inside the cloned DGX_Spark_Qwen3.5-122B-A10B-AR-INT4 repo"
+    "Run install.sh from inside the cloned DGX_Spark_Qwen3.5-397B-A17B-AR-INT4 repo"
 
 # 9. Disk space (need ~170 GB free in $HOME)
-need_gb=170
+need_gb=350
 free_gb=$(df -BG "${HOME}" 2>/dev/null | awk 'NR==2 {gsub("G","",$4); print $4}')
 free_gb=${free_gb:-0}
 if [ "$free_gb" -ge "$need_gb" ]; then
@@ -240,8 +240,8 @@ note "hf:   $(hf --version 2>/dev/null || echo 'not present')"
 step_end
 
 # ── Step 0: hf download ───────────────────────────────────────────────────────
-step_begin "Step 0 — Downloading Intel/Qwen3.5-122B-A10B-int4-AutoRound" \
-           "first time: ~75 GB with progress bars; cached: instant"
+step_begin "Step 0 — Downloading Intel/Qwen3.5-397B-A17B-int4-AutoRound" \
+           "first time: ~226 GB with progress bars; cached: instant"
 
 # Two-pass approach:
 #   Pass 1 — verbose 'hf download' so the user sees progress bars on a
@@ -254,8 +254,8 @@ step_begin "Step 0 — Downloading Intel/Qwen3.5-122B-A10B-int4-AutoRound" \
 #            multiple snapshot directories coexisted in cache (e.g. the
 #            user ran 'hf download' at different times and Intel shipped
 #            a new revision in between).
-hf download Intel/Qwen3.5-122B-A10B-int4-AutoRound
-INTEL_DIR=$(hf download Intel/Qwen3.5-122B-A10B-int4-AutoRound --quiet)
+hf download Intel/Qwen3.5-397B-A17B-int4-AutoRound
+INTEL_DIR=$(hf download Intel/Qwen3.5-397B-A17B-int4-AutoRound --quiet)
 [ -d "$INTEL_DIR" ] || abort "INTEL_DIR not found after hf download: '${INTEL_DIR}' is not a directory. Check your HF cache config (HF_HOME, HF_HUB_CACHE)."
 note "INTEL_DIR=${INTEL_DIR}"
 step_end
@@ -263,15 +263,15 @@ step_end
 # ── Step 1: hybrid checkpoint ─────────────────────────────────────────────────
 MODEL_DIR="${HYBRID_DIR}"
 if [ -f "${HYBRID_DIR}/model.safetensors.index.json" ] \
-    && [ -f "${HYBRID_DIR}/model-00014-of-00014.safetensors" ]; then
+    && [ -f "${HYBRID_DIR}/model-00040-of-00040.safetensors" ]; then
     STEP_NUM=$((STEP_NUM + 1))
     step_skip "Step 1 — hybrid checkpoint already exists at ${HYBRID_DIR}"
 else
     step_begin "Step 1 — Building hybrid INT4+FP8 checkpoint" \
-               "~20 min, output ~71 GB at ${HYBRID_DIR}"
+               "~40 min, output ~220 GB at ${HYBRID_DIR}"
     python "${PROJECT_DIR}/patches/01-hybrid-int4-fp8/build-hybrid-checkpoint.py" \
         --gptq-dir "${INTEL_DIR}" \
-        --fp8-repo Qwen/Qwen3.5-122B-A10B-FP8 \
+        --fp8-repo Qwen/Qwen3.5-397B-A17B-FP8 \
         --output "${HYBRID_DIR}" \
         --force
     step_end
@@ -284,7 +284,7 @@ if [ -f "${MODEL_DIR}/model_extra_tensors.safetensors" ] \
     step_skip "Step 2 — MTP weights already present in ${MODEL_DIR}"
 else
     step_begin "Step 2 — Adding MTP speculative decoding weights" \
-               "copies model_extra_tensors.safetensors (~5 GB) and registers 785 tensors in the index"
+               "copies model_extra_tensors.safetensors and registers MTP tensors in the index"
     python "${PROJECT_DIR}/patches/02-mtp-speculative/add-mtp-weights.py" \
         --source "${INTEL_DIR}" \
         --target "${MODEL_DIR}"
@@ -427,9 +427,10 @@ LAUNCH_CMD="docker run -d --name vllm-qwen35 \\
     --port 8000 \\
     --max-model-len 262144 \\
     --gpu-memory-utilization 0.90 \\
+    --tensor-parallel-size 2 \\
     --reasoning-parser qwen3 \\
     --attention-backend FLASHINFER \\
-    --speculative-config '{\"method\":\"mtp\",\"num_speculative_tokens\":2}'"
+    --speculative-config '{\"method\":\"mtp\",\"num_speculative_tokens\":1}'"
 
 # Measured on a real DGX Spark first-launch run from this exact image:
 # weights load 9m45s + compile/warmup 2m51s + graph capture/engine 29s

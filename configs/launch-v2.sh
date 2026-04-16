@@ -7,11 +7,12 @@ docker run -d --name vllm-qwen35 \
   --gpus all --net=host --ipc=host \
   -v /path/to/models:/models \
   vllm-qwen35-v019-v2 \
-  serve /models/qwen35-122b-hybrid-int4fp8 \
+  serve /models/qwen35-397b-hybrid-int4fp8 \
   --served-model-name qwen \
   --port 8000 \
   --max-model-len 262144 \
   --gpu-memory-utilization 0.90 \
+  --tensor-parallel-size 2 \
   --reasoning-parser qwen3 \
   --attention-backend FLASHINFER \
-  --speculative-config '{"method":"mtp","num_speculative_tokens":2}'
+  --speculative-config '{"method":"mtp","num_speculative_tokens":1}'

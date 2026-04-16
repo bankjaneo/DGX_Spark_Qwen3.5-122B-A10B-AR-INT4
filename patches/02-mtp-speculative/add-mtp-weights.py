@@ -8,7 +8,7 @@ speculative decoding.
 
 Usage:
     python add-mtp-weights.py \
-        --source ~/.cache/huggingface/hub/models--Intel--Qwen3.5-122B-A10B-int4-AutoRound/snapshots/<hash> \
+        --source ~/.cache/huggingface/hub/models--Intel--Qwen3.5-397B-A17B-int4-AutoRound/snapshots/<hash> \
         --target /path/to/hybrid-checkpoint
 """
 

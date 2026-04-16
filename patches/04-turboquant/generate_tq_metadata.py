@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
-"""Generate default TurboQuant metadata (turboquant_kv.json) for Qwen3.5-122B.
+"""Generate default TurboQuant metadata (turboquant_kv.json) for Qwen3.5-397B.
 
 Places the file in the model directory so vLLM finds it automatically.
 
 Usage:
     python patches/04-turboquant/generate_tq_metadata.py \
-        --model-dir ~/models/qwen35-122b-hybrid-int4fp8
+        --model-dir ~/models/qwen35-397b-hybrid-int4fp8
 """
 import argparse
 import json
 from pathlib import Path
 
 
-# Qwen3.5-122B-A10B: 48 layers, but only every 4th uses standard attention
-# (layers 11,15,19,23,27,31,35,39,43,47 + some others).
-# The rest use DeltaNet linear attention (no KV cache).
-# Plus 3 MTP layers.
-QWEN35_122B_ATTENTION_LAYERS = [
+# Qwen3.5-397B-A17B: 60 layers, every 4th uses standard (full) attention
+# (layers 3,7,11,15,...,55,59). The rest use DeltaNet linear attention
+# (no KV cache). Plus 1 MTP layer.
+QWEN35_397B_ATTENTION_LAYERS = [
+    "model.layers.3.self_attn.attn",
+    "model.layers.7.self_attn.attn",
     "model.layers.11.self_attn.attn",
     "model.layers.15.self_attn.attn",
     "model.layers.19.self_attn.attn",
@@ -27,13 +28,11 @@ QWEN35_122B_ATTENTION_LAYERS = [
     "model.layers.39.self_attn.attn",
     "model.layers.43.self_attn.attn",
     "model.layers.47.self_attn.attn",
-    # Additional attention layers
-    "model.layers.3.self_attn.attn",
-    "model.layers.7.self_attn.attn",
-    # MTP layers
+    "model.layers.51.self_attn.attn",
+    "model.layers.55.self_attn.attn",
+    "model.layers.59.self_attn.attn",
+    # MTP layer
     "mtp.layers.0.self_attn.attn",
-    "mtp.layers.1.self_attn.attn",
-    "mtp.layers.2.self_attn.attn",
 ]
 
 HEAD_SIZE = 256
@@ -84,7 +83,7 @@ def _outlier_count(head_size: int, recipe: str) -> int:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate TurboQuant metadata (turboquant_kv.json) for Qwen3.5-122B.",
+        description="Generate TurboQuant metadata (turboquant_kv.json) for Qwen3.5-397B.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Recipes
@@ -150,7 +149,7 @@ turboquant_q8k_tq25v Like turboquant_q8k_tq35v but with TQ25 for V (more compres
         value_indices = key_indices
 
     layers = {}
-    for layer_name in QWEN35_122B_ATTENTION_LAYERS:
+    for layer_name in QWEN35_397B_ATTENTION_LAYERS:
         layers[layer_name] = {
             "key_high_precision_indices": key_indices,
             "value_high_precision_indices": value_indices,
@@ -160,7 +159,7 @@ turboquant_q8k_tq25v Like turboquant_q8k_tq35v but with TQ25 for V (more compres
         "version": 1,
         "recipe": recipe,
         "head_size": HEAD_SIZE,
-        "model_name": "Qwen3.5-122B-A10B",
+        "model_name": "Qwen3.5-397B-A17B",
         "transform_version": "structured_hadamard_v1",
         "codebook_version": "lloyd_beta_v1",
         "layers": layers,
