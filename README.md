@@ -123,7 +123,7 @@ python patches/01-hybrid-int4-fp8/build-hybrid-checkpoint.py \
     --force
 ```
 
-Takes ~30 minutes. Output: ~95 GB. If you skip this step, use `$INTEL_DIR` as your model path in step 2 and 4.
+Takes ~30 minutes. Output: ~220 GB. If you skip this step, use `$INTEL_DIR` as your model path in step 2 and 4.
 
 ### Step 2: Add MTP weights
 
