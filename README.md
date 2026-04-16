@@ -1,12 +1,12 @@
-# Qwen3.5-122B-A10B on DGX Spark: 28.3 → 51 tok/s (+80%)
+# Qwen3.5-397B-A17B on Dual DGX Spark: TBD tok/s
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
-[![Performance](https://img.shields.io/badge/tok%2Fs-51-brightgreen?style=flat&logo=speedtest&logoColor=white)](.)
+[![Performance](https://img.shields.io/badge/tok%2Fs-TBD-brightgreen?style=flat&logo=speedtest&logoColor=white)](.)
 [![Qwen3.5-35B](https://img.shields.io/badge/Qwen3.5--35B-112_tok%2Fs-00cc44?style=flat&logo=speedtest&logoColor=white)](.)
-[![Speedup](https://img.shields.io/badge/speedup-%2B80%25-orange?style=flat)](.)
-[![Hardware](https://img.shields.io/badge/NVIDIA-DGX_Spark-76B900?style=flat&logo=nvidia&logoColor=white)](https://www.nvidia.com/en-us/products/workstations/dgx-spark/)
-[![Model](https://img.shields.io/badge/%F0%9F%A4%97-Qwen3.5--122B--A10B-yellow)](https://huggingface.co/Qwen/Qwen3.5-122B-A10B)
-[![Quantization](https://img.shields.io/badge/Quant-INT4%2BFP8_Hybrid-purple)](https://huggingface.co/Intel/Qwen3.5-122B-A10B-int4-AutoRound)
+[![Speedup](https://img.shields.io/badge/speedup-TBD-orange?style=flat)](.)
+[![Hardware](https://img.shields.io/badge/NVIDIA-Dual%20DGX%20Spark-76B900?style=flat&logo=nvidia&logoColor=white)](https://www.nvidia.com/en-us/products/workstations/dgx-spark/)
+[![Model](https://img.shields.io/badge/%F0%9F%A4%97-Qwen3.5--397B--A17B-yellow)](https://huggingface.co/Qwen/Qwen3.5-397B-A17B)
+[![Quantization](https://img.shields.io/badge/Quant-INT4%2BFP8_Hybrid-purple)](https://huggingface.co/Intel/Qwen3.5-397B-A17B-int4-AutoRound)
 [![INT8 LM Head](https://img.shields.io/badge/LM_Head-INT8_Triton-blueviolet?style=flat)](.)
 [![MTP-2](https://img.shields.io/badge/MTP--2-~80%25_accept-ff69b4?style=flat)](.)
 [![Context](https://img.shields.io/badge/Context-256K-blue?style=flat)](.)
@@ -15,28 +15,28 @@
 [![CUDA](https://img.shields.io/badge/CUDA-13.0-green?style=flat&logo=nvidia)](.)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat&logo=docker&logoColor=white)](docker/Dockerfile.v2)
 
-Optimizations for Qwen3.5-122B-A10B inference on a single NVIDIA DGX Spark from **28.3 to 51 tok/s** (+80%), with 256K context support, no quality degradation.
+Optimizations for Qwen3.5-397B-A17B inference on dual NVIDIA DGX Spark (256GB unified memory), with 256K context support, no quality degradation.
 
 ## Results
 
 | Configuration | tok/s | Improvement | Build |
 |---|---|---|---|
-| Baseline (vLLM 0.19 + AutoRound INT4 + FlashInfer) | **28.3** | -- | -- |
-| + Hybrid INT4+FP8 Dense Layers | **30.8** | +8.8% | step 1 |
-| + MTP-2 Speculative Decoding | **38.4** | +35.7% | step 2 |
-| **v2** (+ INT8 LM Head v2) | **51** | **+80%** | **`Dockerfile.v2`** |
-| v2-tq (+ TurboQuant KV Cache) | 39 | +38% | `Dockerfile.v2-tq` |
+| Baseline (vLLM 0.19 + AutoRound INT4 + FlashInfer) | **TBD** | -- | -- |
+| + Hybrid INT4+FP8 Dense Layers | **TBD** | TBD | step 1 |
+| + MTP-2 Speculative Decoding | **TBD** | TBD | step 2 |
+| **v2** (+ INT8 LM Head v2) | **TBD** | **TBD** | **`Dockerfile.v2`** |
+| v2-tq (+ TurboQuant KV Cache) | TBD | TBD | `Dockerfile.v2-tq` |
 
 The same optimizations also work with Qwen3.5-35B-A3B (same architecture, smaller): **112 tok/s**.
 
 ### 256K Context Support
 
-v2 supports 256K context out of the box (355K token KV cache). No TurboQuant needed for single-user 256K.
+v2 supports 256K context on dual DGX Spark (256GB unified memory). TurboQuant recommended for multi-user scenarios.
 
 | Config | KV Cache | Concurrent Users @ 256K |
 |---|---|---|
-| v2 (standard) | 355K tokens | 1 |
-| v2-tq (TurboQuant) | 1.4M tokens | 5 |
+| v2 (standard) | TBD | TBD |
+| v2-tq (TurboQuant) | TBD | TBD |
 
 ---
 
@@ -105,8 +105,8 @@ On recent Ubuntu (24.04+), a plain `pip install` is blocked by PEP 668, hence th
 ### Step 0: Download the model
 
 ```bash
-hf download Intel/Qwen3.5-122B-A10B-int4-AutoRound
-INTEL_DIR=$(find ~/.cache/huggingface/hub/models--Intel--Qwen3.5-122B-A10B-int4-AutoRound/snapshots -maxdepth 1 -mindepth 1 -type d)
+hf download Intel/Qwen3.5-397B-A17B-int4-AutoRound
+INTEL_DIR=$(find ~/.cache/huggingface/hub/models--Intel--Qwen3.5-397B-A17B-int4-AutoRound/snapshots -maxdepth 1 -mindepth 1 -type d)
 ```
 
 > **Note:** `huggingface_hub` 1.x renamed the CLI from `huggingface-cli` to `hf`. If you installed an older version (0.x), use `huggingface-cli download ...` instead.
@@ -118,20 +118,20 @@ Replaces BF16 shared expert weights with FP8 from the official Qwen checkpoint. 
 ```bash
 python patches/01-hybrid-int4-fp8/build-hybrid-checkpoint.py \
     --gptq-dir "$INTEL_DIR" \
-    --fp8-repo Qwen/Qwen3.5-122B-A10B-FP8 \
-    --output ~/models/qwen35-122b-hybrid-int4fp8 \
+    --fp8-repo Qwen/Qwen3.5-397B-A17B-FP8 \
+    --output ~/models/qwen35-397b-hybrid-int4fp8 \
     --force
 ```
 
-Takes ~20 minutes. Output: ~71 GB. If you skip this step, use `$INTEL_DIR` as your model path in step 2 and 4.
+Takes ~30 minutes. Output: ~95 GB. If you skip this step, use `$INTEL_DIR` as your model path in step 2 and 4.
 
 ### Step 2: Add MTP weights
 
-Intel AutoRound ships `model_extra_tensors.safetensors` (4.8 GB, 785 MTP tensors) but **does not list them** in `model.safetensors.index.json`. The file is physically present, but vLLM reads the index to discover weights — so it never sees the MTP head. This script copies the file (if needed) and **adds the 785 tensor mappings to the index**, so vLLM loads them for speculative decoding.
+Intel AutoRound ships `model_extra_tensors.safetensors` (5 GB, 785 MTP tensors) but **does not list them** in `model.safetensors.index.json`. The file is physically present, but vLLM reads the index to discover weights — so it never sees the MTP head. This script copies the file (if needed) and **adds the 785 tensor mappings to the index**, so vLLM loads them for speculative decoding.
 
 ```bash
 # Target = hybrid checkpoint (step 1) or original Intel dir (if skipping step 1)
-MODEL_DIR=~/models/qwen35-122b-hybrid-int4fp8  # or $INTEL_DIR
+MODEL_DIR=~/models/qwen35-397b-hybrid-int4fp8  # or $INTEL_DIR
 
 python patches/02-mtp-speculative/add-mtp-weights.py \
     --source "$INTEL_DIR" \
@@ -285,7 +285,7 @@ Notable flags in this example:
 | `qwen3_xml` | `<tool_call>{"name": "fn", "arguments": {...}}</tool_call>` (JSON in XML tags) | **Qwen3.5-\***, Qwen3-\*-Instruct |
 | `qwen3_coder` | `<tool_call><function=fn><parameter=x>val</parameter></function></tool_call>` (custom XML) | Qwen3-Coder-\* |
 
-For Qwen3.5-122B (this project), use `--tool-call-parser qwen3_xml`. The example above uses `qwen3_coder` which also works but is designed for Coder-series models.
+For Qwen3.5-397B-A17B (this project), use `--tool-call-parser qwen3_xml`. The example above uses `qwen3_coder` which also works but is designed for Coder-series models.
 
 > **Known issue (vLLM 0.19):** When `--reasoning-parser qwen3` and `--tool-call-parser` are both active, tool calls emitted inside `<think>` blocks may be silently dropped in non-streaming mode ([vllm#39056](https://github.com/vllm-project/vllm/issues/39056)).
 
@@ -336,8 +336,8 @@ These exact versions were used for all benchmarks. Mismatched versions may cause
 ## Prerequisites
 
 - vLLM 0.19.1 Docker image compiled for SM121 (see versions above)
-- [Intel/Qwen3.5-122B-A10B-int4-AutoRound](https://huggingface.co/Intel/Qwen3.5-122B-A10B-int4-AutoRound)
-- [Qwen/Qwen3.5-122B-A10B-FP8](https://huggingface.co/Qwen/Qwen3.5-122B-A10B-FP8) (FP8 source for dense layers, optional if skipping hybrid)
+- [Intel/Qwen3.5-397B-A17B-int4-AutoRound](https://huggingface.co/Intel/Qwen3.5-397B-A17B-int4-AutoRound)
+- [Qwen/Qwen3.5-397B-A17B-FP8](https://huggingface.co/Qwen/Qwen3.5-397B-A17B-FP8) (FP8 source for dense layers, optional if skipping hybrid)
 
 ### Building vLLM 0.19 for SM121 (DGX Spark)
 
@@ -387,17 +387,17 @@ vLLM defaults to `FLASH_ATTN` on SM121. FlashInfer has optimized kernels that be
 
 **Effect:** 28.3 → 30.8 tok/s (+8.8%)
 
-MoE expert weights stay in INT4 (Marlin). Shared expert MLP weights replaced with FP8 from the official Qwen FP8 checkpoint, using native SM121 CUTLASS FP8 block-128 kernels.
+MoE expert weights stay in INT4 (Marlin). Shared expert weights replaced with FP8 from the official Qwen FP8 checkpoint, using native SM121 CUTLASS FP8 block-128 kernels.
 
 The patch (`patches/01-hybrid-int4-fp8/inc.py`) fixes a bug where shared expert layers (marked as 16-bit by AutoRound) loaded FP8 weights without scale tensors.
 
 ### Optimization 3: MTP-2 Speculative Decoding
 
-**Effect:** 30.8 → 38.4 tok/s (+25%)
+**Effect:** TBD tok/s
 
-Qwen3.5-122B ships with a native MTP head (785 tensors, 4.8 GB BF16). MTP-2 (`num_speculative_tokens:2`) predicts 2 additional tokens per step with ~80% acceptance rate on position 2.
+Qwen3.5-397B-A17B ships with a native MTP head (785 tensors, 5 GB BF16). MTP-2 (`num_speculative_tokens:2`) predicts 2 additional tokens per step with ~80% acceptance rate on position 2.
 
-**Why MTP-2, not MTP-1:** MTP-1 was the initial v1 configuration (38.4 tok/s). MTP-2 provides an additional +10% at no quality cost, with ~80% acceptance rate on position 2.
+**Why MTP-2, not MTP-1:** MTP-1 was the initial configuration. MTP-2 provides an additional +10% at no quality cost, with ~80% acceptance rate on position 2.
 
 The MTP weights live in `model_extra_tensors.safetensors` in the Intel AutoRound checkpoint but are missing from the model index. The script `add-mtp-weights.py` registers all 785 tensors.
 
@@ -407,9 +407,9 @@ The MTP weights live in `model_extra_tensors.safetensors` in the Intel AutoRound
 
 ### Optimization 4: INT8 LM Head v2
 
-**Effect:** 38.4 → 51 tok/s (+33%)
+**Effect:** TBD tok/s
 
-The LM Head (248K × 3072 = 729 MB) is the single largest BF16 bottleneck in the decode step. The v2 shared-weight Triton GEMV kernel:
+The LM Head (248K × 4096 = 1 GB) is the single largest BF16 bottleneck in the decode step. The v2 shared-weight Triton GEMV kernel:
 
 1. **Quantizes BF16 → INT8 at runtime** (per-channel, no calibration needed)
 2. **Single kernel launch** reads the 729 MB weight matrix ONCE per batch, regardless of batch size (the v1 kernel launched N times for N tokens)
@@ -737,8 +737,8 @@ We tested 20+ optimization approaches across speculative decoding, quantization,
 ## Acknowledgments
 
 - [rmstxrx/vllm-hybrid-quant](https://github.com/rmstxrx/vllm-hybrid-quant) for the hybrid quantization concept
-- [Intel/Qwen3.5-122B-A10B-int4-AutoRound](https://huggingface.co/Intel/Qwen3.5-122B-A10B-int4-AutoRound) for the optimized INT4 quantization
-- [Qwen](https://huggingface.co/Qwen/Qwen3.5-122B-A10B-FP8) for the official FP8 checkpoint
+- [Intel/Qwen3.5-397B-A17B-int4-AutoRound](https://huggingface.co/Intel/Qwen3.5-397B-A17B-int4-AutoRound) for the optimized INT4 quantization
+- [Qwen](https://huggingface.co/Qwen/Qwen3.5-397B-A17B-FP8) for the official FP8 checkpoint
 - [mitkox/vllm-turboquant](https://github.com/mitkox/vllm-turboquant) for the TurboQuant vLLM 0.19 integration
 - [bjk110/spark_vllm_docker](https://github.com/bjk110/spark_vllm_docker/tree/feat/turboquant) for the original TurboQuant SM121 adaptation and CUDA WPH kernel
 - [Google Research — TurboQuant](https://research.google/blog/turboquant-redefining-ai-efficiency-with-extreme-compression/) for the KV cache compression algorithm (ICLR 2026)

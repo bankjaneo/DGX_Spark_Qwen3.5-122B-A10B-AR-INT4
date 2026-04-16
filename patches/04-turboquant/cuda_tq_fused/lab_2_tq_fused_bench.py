@@ -41,10 +41,13 @@ DEVICE = torch.device("cuda:0")
 
 # ─── TQ Pack/Unpack helpers (reference implementation) ────────────────────────
 
+
 def pack_mse_indices(indices: torch.Tensor, dim: int, mse_bits: int) -> torch.Tensor:
     """Pack MSE indices into bytes. indices: [..., dim] with values in [0, 2^mse_bits)."""
     num_bytes = (dim * mse_bits + 7) // 8
-    packed = torch.zeros(*indices.shape[:-1], num_bytes, dtype=torch.uint8, device=indices.device)
+    packed = torch.zeros(
+        *indices.shape[:-1], num_bytes, dtype=torch.uint8, device=indices.device
+    )
     for d in range(dim):
         idx = indices[..., d].int()
         bit_pos = d * mse_bits
@@ -59,12 +62,14 @@ def pack_mse_indices(indices: torch.Tensor, dim: int, mse_bits: int) -> torch.Te
 def pack_qjl_signs(signs: torch.Tensor, dim: int) -> torch.Tensor:
     """Pack sign bits (0 or 1) into bytes."""
     num_bytes = (dim + 7) // 8
-    packed = torch.zeros(*signs.shape[:-1], num_bytes, dtype=torch.uint8, device=signs.device)
+    packed = torch.zeros(
+        *signs.shape[:-1], num_bytes, dtype=torch.uint8, device=signs.device
+    )
     for d in range(dim):
         bit = signs[..., d].to(torch.uint8)
         byte_idx = d // 8
         bit_offset = d % 8
-        packed[..., byte_idx] |= (bit << bit_offset)
+        packed[..., byte_idx] |= bit << bit_offset
     return packed
 
 
@@ -91,9 +96,19 @@ def create_tq_packed(
     packed = torch.zeros(*shape, CACHE_DIM, dtype=torch.uint8, device=vectors.device)
     cursor = 0
 
-    for g_data, F_mat, G_mat, codebook, mse_bits, mse_bytes, qjl_bytes, dim in [
-        (g0_data, F0, G0, codebook_g0, G0_MSE_BITS, 48, 16, G0_DIM),
-        (g1_data, F1, G1, codebook_g1, G1_MSE_BITS, 32, 16, G1_DIM),
+    for (
+        g_data,
+        F_mat,
+        G_mat,
+        codebook,
+        mse_bits,
+        mse_bytes,
+        qjl_bytes,
+        dim,
+        layer_count,
+    ) in [
+        (g0_data, F0, G0, codebook_g0, G0_MSE_BITS, 48, 16, G0_DIM, 60),
+        (g1_data, F1, G1, codebook_g1, G1_MSE_BITS, 32, 16, G1_DIM, 60),
     ]:
         # Compute norms
         norms = g_data.norm(dim=-1, keepdim=True)
@@ -128,13 +143,13 @@ def create_tq_packed(
         res_norm_raw = res_norm_f16.view(torch.uint8).reshape(*shape, 2)
 
         # Assemble packed group
-        packed[..., cursor:cursor+mse_bytes] = mse_packed
+        packed[..., cursor : cursor + mse_bytes] = mse_packed
         cursor += mse_bytes
-        packed[..., cursor:cursor+qjl_bytes] = qjl_packed
+        packed[..., cursor : cursor + qjl_bytes] = qjl_packed
         cursor += qjl_bytes
-        packed[..., cursor:cursor+2] = norm_raw
+        packed[..., cursor : cursor + 2] = norm_raw
         cursor += 2
-        packed[..., cursor:cursor+2] = res_norm_raw
+        packed[..., cursor : cursor + 2] = res_norm_raw
         cursor += 2
 
     return packed
@@ -142,10 +157,11 @@ def create_tq_packed(
 
 # ─── Reference: standard attention on bf16 ────────────────────────────────────
 
+
 def reference_attention(
-    query: torch.Tensor,    # [batch, num_qo_heads, head_size]
-    keys: torch.Tensor,     # [batch, seq_len, num_kv_heads, head_size]
-    values: torch.Tensor,   # [batch, seq_len, num_kv_heads, head_size]
+    query: torch.Tensor,  # [batch, num_qo_heads, head_size]
+    keys: torch.Tensor,  # [batch, seq_len, num_kv_heads, head_size]
+    values: torch.Tensor,  # [batch, seq_len, num_kv_heads, head_size]
     sm_scale: float,
 ) -> torch.Tensor:
     """Standard GQA attention (no paging, for reference)."""
@@ -159,13 +175,16 @@ def reference_attention(
         q = query[:, h, :]  # [batch, hd]
         k = keys[:, :, kv_h, :]  # [batch, seq_len, hd]
         v = values[:, :, kv_h, :]  # [batch, seq_len, hd]
-        scores = torch.matmul(q.unsqueeze(1), k.transpose(1, 2)).squeeze(1) * sm_scale  # [batch, seq_len]
+        scores = (
+            torch.matmul(q.unsqueeze(1), k.transpose(1, 2)).squeeze(1) * sm_scale
+        )  # [batch, seq_len]
         weights = torch.softmax(scores, dim=-1)
         output[:, h, :] = torch.matmul(weights.unsqueeze(1), v).squeeze(1)
     return output
 
 
 # ─── Build Hadamard transforms ───────────────────────────────────────────────
+
 
 def _hadamard_block_sizes(dim):
     sizes = []
@@ -180,10 +199,9 @@ def _hadamard_block_sizes(dim):
 
 
 def _build_structured_hadamard(dim, seed, device):
-    gen = torch.Generator(device='cpu').manual_seed(seed)
+    gen = torch.Generator(device="cpu").manual_seed(seed)
     signs = torch.where(
-        torch.rand(dim, generator=gen) < 0.5,
-        torch.ones(dim), -torch.ones(dim)
+        torch.rand(dim, generator=gen) < 0.5, torch.ones(dim), -torch.ones(dim)
     ).to(device=device, dtype=torch.float32)
 
     H = torch.zeros(dim, dim, device=device, dtype=torch.float32)
@@ -192,13 +210,16 @@ def _build_structured_hadamard(dim, seed, device):
         h = torch.ones(1, 1, device=device, dtype=torch.float32)
         size = 1
         while size < bs:
-            h = torch.cat([
-                torch.cat([h, h], dim=1),
-                torch.cat([h, -h], dim=1),
-            ], dim=0)
+            h = torch.cat(
+                [
+                    torch.cat([h, h], dim=1),
+                    torch.cat([h, -h], dim=1),
+                ],
+                dim=0,
+            )
             size *= 2
-        h = h / (bs ** 0.5)
-        H[offset:offset+bs, offset:offset+bs] = h
+        h = h / (bs**0.5)
+        H[offset : offset + bs, offset : offset + bs] = h
         offset += bs
 
     return torch.diag(signs) @ H
@@ -217,22 +238,41 @@ def get_transforms(dim, device):
 
 # ─── Main test ────────────────────────────────────────────────────────────────
 
+
 def test_correctness(batch_size=1, seq_len=64):
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Correctness test: batch={batch_size}, seq_len={seq_len}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     torch.manual_seed(42)
 
     # Generate random data
-    query = torch.randn(batch_size, NUM_QO_HEADS, HEAD_SIZE, device=DEVICE, dtype=torch.bfloat16)
-    keys = torch.randn(batch_size, seq_len, NUM_KV_HEADS, HEAD_SIZE, device=DEVICE, dtype=torch.bfloat16)
-    values = torch.randn(batch_size, seq_len, NUM_KV_HEADS, HEAD_SIZE, device=DEVICE, dtype=torch.bfloat16)
+    query = torch.randn(
+        batch_size, NUM_QO_HEADS, HEAD_SIZE, device=DEVICE, dtype=torch.bfloat16
+    )
+    keys = torch.randn(
+        batch_size,
+        seq_len,
+        NUM_KV_HEADS,
+        HEAD_SIZE,
+        device=DEVICE,
+        dtype=torch.bfloat16,
+    )
+    values = torch.randn(
+        batch_size,
+        seq_len,
+        NUM_KV_HEADS,
+        HEAD_SIZE,
+        device=DEVICE,
+        dtype=torch.bfloat16,
+    )
     sm_scale = 1.0 / math.sqrt(HEAD_SIZE)
 
     # Reference: standard attention
     ref_output = reference_attention(query, keys, values, sm_scale)
-    print(f"Reference output: shape={ref_output.shape}, norm={ref_output.float().norm():.4f}")
+    print(
+        f"Reference output: shape={ref_output.shape}, norm={ref_output.float().norm():.4f}"
+    )
 
     # Build transforms and codebooks
     F0, G0 = get_transforms(G0_DIM, DEVICE)
@@ -245,8 +285,15 @@ def test_correctness(batch_size=1, seq_len=64):
     # Pack KV into TQ format
     # For paged cache: [num_pages, 2, page_size, num_kv_heads, cache_dim]
     num_pages = (seq_len + PAGE_SIZE - 1) // PAGE_SIZE
-    kv_cache = torch.zeros(num_pages, 2, PAGE_SIZE, NUM_KV_HEADS, CACHE_DIM,
-                           dtype=torch.uint8, device=DEVICE)
+    kv_cache = torch.zeros(
+        num_pages,
+        2,
+        PAGE_SIZE,
+        NUM_KV_HEADS,
+        CACHE_DIM,
+        dtype=torch.uint8,
+        device=DEVICE,
+    )
 
     for s in range(seq_len):
         page_id = s // PAGE_SIZE
@@ -255,7 +302,9 @@ def test_correctness(batch_size=1, seq_len=64):
             for h in range(NUM_KV_HEADS):
                 vec = data[:, s, h, :]  # [batch, head_size]
                 packed = create_tq_packed(vec, cb_g0, cb_g1, F0, G0, F1, G1)
-                kv_cache[page_id, kv_idx, pos_in_page, h, :] = packed[0]  # batch=0 for simplicity
+                kv_cache[page_id, kv_idx, pos_in_page, h, :] = packed[
+                    0
+                ]  # batch=0 for simplicity
 
     # Page table (simple: pages in order)
     kv_indptr = torch.tensor([0, num_pages], dtype=torch.int32, device=DEVICE)
@@ -267,13 +316,24 @@ def test_correctness(batch_size=1, seq_len=64):
     from tq_fused_decode import tq_fused_attention
 
     tq_output = tq_fused_attention(
-        query, kv_cache,
-        kv_indptr, kv_indices, kv_last_page_len,
-        cb_g0, cb_g1,
-        PAGE_SIZE, NUM_QO_HEADS, NUM_KV_HEADS, sm_scale,
-        HEAD_SIZE, CACHE_DIM, torch.bfloat16,
+        query,
+        kv_cache,
+        kv_indptr,
+        kv_indices,
+        kv_last_page_len,
+        cb_g0,
+        cb_g1,
+        PAGE_SIZE,
+        NUM_QO_HEADS,
+        NUM_KV_HEADS,
+        sm_scale,
+        HEAD_SIZE,
+        CACHE_DIM,
+        torch.bfloat16,
     )
-    print(f"TQ fused output: shape={tq_output.shape}, norm={tq_output.float().norm():.4f}")
+    print(
+        f"TQ fused output: shape={tq_output.shape}, norm={tq_output.float().norm():.4f}"
+    )
 
     # Compare
     diff = (ref_output.float() - tq_output.float()).abs()
@@ -299,14 +359,16 @@ def test_correctness(batch_size=1, seq_len=64):
 
 
 def benchmark(batch_size=1, seq_len=4096, num_warmup=5, num_iters=20):
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Performance test: batch={batch_size}, seq_len={seq_len}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     torch.manual_seed(42)
 
     # Generate data
-    query = torch.randn(batch_size, NUM_QO_HEADS, HEAD_SIZE, device=DEVICE, dtype=torch.bfloat16)
+    query = torch.randn(
+        batch_size, NUM_QO_HEADS, HEAD_SIZE, device=DEVICE, dtype=torch.bfloat16
+    )
     sm_scale = 1.0 / math.sqrt(HEAD_SIZE)
 
     F0, G0 = get_transforms(G0_DIM, DEVICE)
@@ -316,8 +378,13 @@ def benchmark(batch_size=1, seq_len=4096, num_warmup=5, num_iters=20):
 
     # Create packed cache
     num_pages = (seq_len + PAGE_SIZE - 1) // PAGE_SIZE
-    kv_cache = torch.randint(0, 256, (num_pages, 2, PAGE_SIZE, NUM_KV_HEADS, CACHE_DIM),
-                             dtype=torch.uint8, device=DEVICE)
+    kv_cache = torch.randint(
+        0,
+        256,
+        (num_pages, 2, PAGE_SIZE, NUM_KV_HEADS, CACHE_DIM),
+        dtype=torch.uint8,
+        device=DEVICE,
+    )
     kv_indptr = torch.tensor([0, num_pages], dtype=torch.int32, device=DEVICE)
     kv_indices = torch.arange(num_pages, dtype=torch.int32, device=DEVICE)
     last_page_len = seq_len - (num_pages - 1) * PAGE_SIZE
@@ -328,9 +395,19 @@ def benchmark(batch_size=1, seq_len=4096, num_warmup=5, num_iters=20):
     # Warmup
     for _ in range(num_warmup):
         _ = tq_fused_attention(
-            query, kv_cache, kv_indptr, kv_indices, kv_last_page_len,
-            cb_g0, cb_g1, PAGE_SIZE, NUM_QO_HEADS, NUM_KV_HEADS, sm_scale,
-            HEAD_SIZE, CACHE_DIM,
+            query,
+            kv_cache,
+            kv_indptr,
+            kv_indices,
+            kv_last_page_len,
+            cb_g0,
+            cb_g1,
+            PAGE_SIZE,
+            NUM_QO_HEADS,
+            NUM_KV_HEADS,
+            sm_scale,
+            HEAD_SIZE,
+            CACHE_DIM,
         )
     torch.cuda.synchronize()
 
@@ -340,9 +417,19 @@ def benchmark(batch_size=1, seq_len=4096, num_warmup=5, num_iters=20):
     start_event.record()
     for _ in range(num_iters):
         _ = tq_fused_attention(
-            query, kv_cache, kv_indptr, kv_indices, kv_last_page_len,
-            cb_g0, cb_g1, PAGE_SIZE, NUM_QO_HEADS, NUM_KV_HEADS, sm_scale,
-            HEAD_SIZE, CACHE_DIM,
+            query,
+            kv_cache,
+            kv_indptr,
+            kv_indices,
+            kv_last_page_len,
+            cb_g0,
+            cb_g1,
+            PAGE_SIZE,
+            NUM_QO_HEADS,
+            NUM_KV_HEADS,
+            sm_scale,
+            HEAD_SIZE,
+            CACHE_DIM,
         )
     end_event.record()
     torch.cuda.synchronize()
@@ -354,17 +441,19 @@ def benchmark(batch_size=1, seq_len=4096, num_warmup=5, num_iters=20):
     bytes_read_tq = seq_len * NUM_KV_HEADS * 2 * PACKED_LOGICAL  # K+V, packed
     bytes_read_bf16 = seq_len * NUM_KV_HEADS * 2 * HEAD_SIZE * 2  # K+V, bf16
     bw_tq = bytes_read_tq / (elapsed_ms / 1000) / 1e9
-    print(f"TQ bandwidth: {bw_tq:.1f} GB/s (reading {bytes_read_tq/1e6:.1f} MB)")
-    print(f"Equivalent bf16 bandwidth: {bytes_read_bf16/1e6:.1f} MB (4.27x more)")
-    print(f"SM121 peak: 273 GB/s, utilization: {bw_tq/273*100:.0f}%")
+    print(f"TQ bandwidth: {bw_tq:.1f} GB/s (reading {bytes_read_tq / 1e6:.1f} MB)")
+    print(f"Equivalent bf16 bandwidth: {bytes_read_bf16 / 1e6:.1f} MB (4.27x more)")
+    print(f"SM121 peak: 273 GB/s, utilization: {bw_tq / 273 * 100:.0f}%")
 
     return elapsed_ms
 
 
 if __name__ == "__main__":
     print("TQ Fused Decode Kernel — Lab 2")
-    print(f"Config: head_size={HEAD_SIZE}, groups=128+128, "
-          f"MSE bits=3+2, QO={NUM_QO_HEADS}, KV={NUM_KV_HEADS}")
+    print(
+        f"Config: head_size={HEAD_SIZE}, groups=128+128, "
+        f"MSE bits=3+2, QO={NUM_QO_HEADS}, KV={NUM_KV_HEADS}"
+    )
 
     # Correctness
     cos_sim = test_correctness(batch_size=1, seq_len=64)

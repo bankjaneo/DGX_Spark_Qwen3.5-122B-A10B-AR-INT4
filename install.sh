@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# install.sh — automated build pipeline for DGX_Spark Qwen3.5-122B v2 (Steps 0-4).
+# install.sh — automated build pipeline for DGX_Spark Qwen3.5-397B-A17B v2 (Steps 0-4).
 #
 # Walks through the Quick Start of README.md from a fresh clone:
-#   0. Download Intel/Qwen3.5-122B-A10B-int4-AutoRound (~75 GB if not cached)
-#   1. Build hybrid INT4+FP8 checkpoint               (~20 min, +9% perf, optional)
+#   0. Download Intel/Qwen3.5-397B-A17B-int4-AutoRound (~250 GB if not cached)
+#   1. Build hybrid INT4+FP8 checkpoint               (~30 min, +9% perf, optional)
 #   2. Add MTP speculative decoding weights
 #   3. Build base vLLM image for SM121                (~30-60 min, runs Docker)
 #   4. Build vllm-qwen35-v2 final image
@@ -189,7 +189,7 @@ if [ -f "${PROJECT_DIR}/patches/01-hybrid-int4-fp8/build-hybrid-checkpoint.py" ]
     present=1
 fi
 have_check "project files at ${PROJECT_DIR}/{patches,docker}" "$present" \
-    "Run install.sh from inside the cloned DGX_Spark_Qwen3.5-122B-A10B-AR-INT4 repo"
+    "Run install.sh from inside the cloned DGX_Spark_Qwen3.5-397B-A17B-AR-INT4 repo"
 
 # 9. Disk space (need ~170 GB free in $HOME)
 need_gb=170
@@ -240,12 +240,12 @@ note "hf:   $(hf --version 2>/dev/null || echo 'not present')"
 step_end
 
 # ── Step 0: hf download ───────────────────────────────────────────────────────
-step_begin "Step 0 — Downloading Intel/Qwen3.5-122B-A10B-int4-AutoRound" \
-           "first time: ~75 GB with progress bars; cached: instant"
+step_begin "Step 0 — Downloading Intel/Qwen3.5-397B-A17B-int4-AutoRound" \
+           "first time: ~250 GB with progress bars; cached: instant"
 
 # Two-pass approach:
 #   Pass 1 — verbose 'hf download' so the user sees progress bars on a
-#            first-time 75 GB download (no tqdm = looks frozen for 10+ min).
+#            first-time 250 GB download (no tqdm = looks frozen for 10+ min).
 #   Pass 2 — 'hf download --quiet' is a no-op against the now-populated
 #            cache, but unlike pass 1 it prints *only* the snapshot
 #            directory path on stdout, which is exactly what we need to
@@ -254,8 +254,8 @@ step_begin "Step 0 — Downloading Intel/Qwen3.5-122B-A10B-int4-AutoRound" \
 #            multiple snapshot directories coexisted in cache (e.g. the
 #            user ran 'hf download' at different times and Intel shipped
 #            a new revision in between).
-hf download Intel/Qwen3.5-122B-A10B-int4-AutoRound
-INTEL_DIR=$(hf download Intel/Qwen3.5-122B-A10B-int4-AutoRound --quiet)
+hf download Intel/Qwen3.5-397B-A17B-int4-AutoRound
+INTEL_DIR=$(hf download Intel/Qwen3.5-397B-A17B-int4-AutoRound --quiet)
 [ -d "$INTEL_DIR" ] || abort "INTEL_DIR not found after hf download: '${INTEL_DIR}' is not a directory. Check your HF cache config (HF_HOME, HF_HUB_CACHE)."
 note "INTEL_DIR=${INTEL_DIR}"
 step_end
@@ -268,10 +268,10 @@ if [ -f "${HYBRID_DIR}/model.safetensors.index.json" ] \
     step_skip "Step 1 — hybrid checkpoint already exists at ${HYBRID_DIR}"
 else
     step_begin "Step 1 — Building hybrid INT4+FP8 checkpoint" \
-               "~20 min, output ~71 GB at ${HYBRID_DIR}"
+               "~30 min, output ~95 GB at ${HYBRID_DIR}"
     python "${PROJECT_DIR}/patches/01-hybrid-int4-fp8/build-hybrid-checkpoint.py" \
         --gptq-dir "${INTEL_DIR}" \
-        --fp8-repo Qwen/Qwen3.5-122B-A10B-FP8 \
+        --fp8-repo Qwen/Qwen3.5-397B-A17B-FP8 \
         --output "${HYBRID_DIR}" \
         --force
     step_end

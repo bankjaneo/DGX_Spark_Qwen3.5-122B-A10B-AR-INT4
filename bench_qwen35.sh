@@ -1,5 +1,5 @@
 #!/bin/bash
-# Qwen3.5-122B-A10B benchmark — measures tok/s for different prompt types
+# Qwen3.5-397B-A17B benchmark — measures tok/s for different prompt types
 # Usage: ./bench_qwen35.sh [label]
 # Runs each test 2x and shows both results
 
@@ -38,7 +38,7 @@ bench() {
 }
 
 echo "╔══════════════════════════════════════════════════════╗"
-echo "║  Qwen3.5-122B-A10B Benchmark: $LABEL"
+echo "║  Qwen3.5-397B-A17B Benchmark: $LABEL"
 echo "║  $(date)"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
