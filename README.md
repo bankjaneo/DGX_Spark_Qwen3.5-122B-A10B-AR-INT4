@@ -8,7 +8,7 @@
 [![Model](https://img.shields.io/badge/%F0%9F%A4%97-Qwen3.5--397B--A17B-yellow)](https://huggingface.co/Qwen/Qwen3.5-397B-A17B)
 [![Quantization](https://img.shields.io/badge/Quant-INT4%2BFP8_Hybrid-purple)](https://huggingface.co/Intel/Qwen3.5-397B-A17B-int4-AutoRound)
 [![INT8 LM Head](https://img.shields.io/badge/LM_Head-INT8_Triton-blueviolet?style=flat)](.)
-[![MTP-2](https://img.shields.io/badge/MTP--2-~80%25_accept-ff69b4?style=flat)](.)
+[![MTP-1](https://img.shields.io/badge/MTP--1-speculative-ff69b4?style=flat)](.)
 [![Context](https://img.shields.io/badge/Context-256K-blue?style=flat)](.)
 [![TurboQuant](https://img.shields.io/badge/TQ-4x_KV_cache-cyan?style=flat)](.)
 [![vLLM](https://img.shields.io/badge/vLLM-0.19.1-red?style=flat)](https://github.com/vllm-project/vllm)
@@ -23,7 +23,7 @@ Optimizations for Qwen3.5-397B-A17B inference on dual NVIDIA DGX Spark (256GB un
 |---|---|---|---|
 | Baseline (vLLM 0.19 + AutoRound INT4 + FlashInfer) | **TBD** | -- | -- |
 | + Hybrid INT4+FP8 Dense Layers | **TBD** | TBD | step 1 |
-| + MTP-2 Speculative Decoding | **TBD** | TBD | step 2 |
+| + MTP-1 Speculative Decoding | **TBD** | TBD | step 2 |
 | **v2** (+ INT8 LM Head v2) | **TBD** | **TBD** | **`Dockerfile.v2`** |
 | v2-tq (+ TurboQuant KV Cache) | TBD | TBD | `Dockerfile.v2-tq` |
 
@@ -46,7 +46,7 @@ All optimizations are independent — pick what you need:
 
 | Path | Steps | tok/s | What you get |
 |---|---|---|---|
-| **MTP only** (easiest) | 0 → 2 → 3 → 4 → 5 | ~44 | MTP-2 + INT8 LM Head, no hybrid |
+| **MTP only** (easiest) | 0 → 2 → 3 → 4 → 5 | ~38 | MTP-1 + INT8 LM Head, no hybrid |
 | **Full v2** (recommended) | 0 → 1 → 2 → 3 → 4 → 5 | **51** | All optimizations |
 
 ### Automated install (TL;DR)
@@ -127,7 +127,9 @@ Takes ~30 minutes. Output: ~95 GB. If you skip this step, use `$INTEL_DIR` as yo
 
 ### Step 2: Add MTP weights
 
-Intel AutoRound ships `model_extra_tensors.safetensors` (5 GB, 785 MTP tensors) but **does not list them** in `model.safetensors.index.json`. The file is physically present, but vLLM reads the index to discover weights — so it never sees the MTP head. This script copies the file (if needed) and **adds the 785 tensor mappings to the index**, so vLLM loads them for speculative decoding.
+Intel AutoRound ships `model_extra_tensors.safetensors` (5 GB, 785 MTP tensors) but **does not list them** in `model.safetensors.index.json`. The file is physically present, but vLLM reads the index to discover weights — so it never sees the MTP head. This script copies the file (if needed) and **adds the MTP tensor mappings to the index**, so vLLM loads them for speculative decoding.
+
+> **Note:** Qwen3.5-397B-A17B has 1 MTP layer (vs 3 in the 122B model), so `num_speculative_tokens` is capped at 1.
 
 ```bash
 # Target = hybrid checkpoint (step 1) or original Intel dir (if skipping step 1)
@@ -196,14 +198,15 @@ docker run -d --name vllm-qwen35 \
   --gpus all --net=host --ipc=host \
   -v ~/models:/models \
   vllm-qwen35-v2 \
-  serve /models/qwen35-122b-hybrid-int4fp8 \
+  serve /models/qwen35-397b-hybrid-int4fp8 \
   --served-model-name qwen \
   --port 8000 \
+  --tensor-parallel-size 2 \
   --max-model-len 262144 \
   --gpu-memory-utilization 0.90 \
   --reasoning-parser qwen3 \
   --attention-backend FLASHINFER \
-  --speculative-config '{"method":"mtp","num_speculative_tokens":2}'
+  --speculative-config '{"method":"mtp","num_speculative_tokens":1}'
 ```
 
 > If you skipped step 1, replace the model path with your Intel AutoRound directory.
@@ -223,7 +226,7 @@ curl http://localhost:8000/v1/chat/completions \
 ./bench_qwen35.sh "v2"
 ```
 
-Expected: ~51 tok/s with hybrid, ~44 tok/s without hybrid (Run 2; Run 1 is JIT warmup).
+Expected: ~38 tok/s with hybrid, ~28 tok/s without hybrid (Run 2; Run 1 is JIT warmup).
 
 ### Running in Production
 
@@ -239,16 +242,17 @@ docker run -it --name vllm-qwen35 \
   --gpus all --net=host --ipc=host \
   -v ~/models:/models \
   vllm-qwen35-v2 \
-  serve /models/qwen35-122b-hybrid-int4fp8 \
+  serve /models/qwen35-397b-hybrid-int4fp8 \
   --served-model-name qwen/qwen3.5 \
   --max-model-len 196608 \
   --max-num-batched-tokens 32768 \
   --gpu-memory-utilization 0.88 \
+  --tensor-parallel-size 2 \
   --port 8000 \
   --host 0.0.0.0 \
   --load-format fastsafetensors \
   --attention-backend FLASHINFER \
-  --speculative-config '{"method":"mtp","num_speculative_tokens":2}' \
+  --speculative-config '{"method":"mtp","num_speculative_tokens":1}' \
   --enable-chunked-prefill \
   --enable-auto-tool-choice \
   --tool-call-parser qwen3_coder \
@@ -297,7 +301,7 @@ For Qwen3.5-397B-A17B (this project), use `--tool-call-parser qwen3_xml`. The ex
 | Garbage output | Ensure patched image, not vanilla vLLM |
 | OOM at startup | Lower `--gpu-memory-utilization` to 0.85 |
 | `content: null` | Normal for thinking models. Response is in `reasoning` field. |
-| Only ~38 tok/s | Check `--speculative-config` has `num_speculative_tokens:2` |
+| Only ~28 tok/s | Check `--speculative-config` has `num_speculative_tokens:1` |
 | Stale Triton cache after rebuild | `docker exec <name> rm -rf /root/.cache/triton` and restart |
 | MTP doesn't work with PyTorch backend | MTP requires FlashInfer backend (`--attention-backend FLASHINFER`). PyTorch backend is not supported. Also check vLLM version — MTP had bugs in pre-0.19 versions ([#36843](https://github.com/vllm-project/vllm/issues/36843), [#36917](https://github.com/vllm-project/vllm/issues/36917)). |
 | Multi-node / Ray cluster issues | This project is tested on a **single DGX Spark only**. Multi-node setups (Ray, 2x Spark) have different requirements and are not covered here. Community reports suggest up to 56 tok/s on 2x Spark with Ray, but cluster configuration is outside our scope. |
@@ -391,13 +395,13 @@ MoE expert weights stay in INT4 (Marlin). Shared expert weights replaced with FP
 
 The patch (`patches/01-hybrid-int4-fp8/inc.py`) fixes a bug where shared expert layers (marked as 16-bit by AutoRound) loaded FP8 weights without scale tensors.
 
-### Optimization 3: MTP-2 Speculative Decoding
+### Optimization 3: MTP-1 Speculative Decoding
 
 **Effect:** TBD tok/s
 
-Qwen3.5-397B-A17B ships with a native MTP head (785 tensors, 5 GB BF16). MTP-2 (`num_speculative_tokens:2`) predicts 2 additional tokens per step with ~80% acceptance rate on position 2.
+Qwen3.5-397B-A17B ships with a native MTP head (1 MTP layer) in BF16. MTP-1 (`num_speculative_tokens:1`) predicts 1 additional token per step.
 
-**Why MTP-2, not MTP-1:** MTP-1 was the initial configuration. MTP-2 provides an additional +10% at no quality cost, with ~80% acceptance rate on position 2.
+> **Note:** The 397B model has only 1 MTP layer (vs 3 in 122B), so `num_speculative_tokens` is capped at 1. MTP-2 is not available for this model.
 
 The MTP weights live in `model_extra_tensors.safetensors` in the Intel AutoRound checkpoint but are missing from the model index. The script `add-mtp-weights.py` registers all 785 tensors.
 
@@ -505,32 +509,32 @@ The `generate_tq_metadata.py` script supports multiple recipes. Choose based on 
 
 # TQ35 — default, balanced (4x memory reduction)
 python patches/04-turboquant/generate_tq_metadata.py \
-    --model-dir ~/models/qwen35-122b-hybrid-int4fp8 \
-    --output-path ~/models/qwen35-122b-hybrid-int4fp8/turboquant_kv_tq35.json
+    --model-dir ~/models/qwen35-397b-hybrid-int4fp8 \
+    --output-path ~/models/qwen35-397b-hybrid-int4fp8/turboquant_kv_tq35.json
 
 # TQ25 — maximum compression (5x memory reduction, lower quality)
 python patches/04-turboquant/generate_tq_metadata.py \
-    --model-dir ~/models/qwen35-122b-hybrid-int4fp8 \
+    --model-dir ~/models/qwen35-397b-hybrid-int4fp8 \
     --recipe turboquant25 \
-    --output-path ~/models/qwen35-122b-hybrid-int4fp8/turboquant_kv_tq25.json
+    --output-path ~/models/qwen35-397b-hybrid-int4fp8/turboquant_kv_tq25.json
 
 # turboquant_asym — same memory as TQ35, better long-context needle retrieval
 python patches/04-turboquant/generate_tq_metadata.py \
-    --model-dir ~/models/qwen35-122b-hybrid-int4fp8 \
+    --model-dir ~/models/qwen35-397b-hybrid-int4fp8 \
     --recipe turboquant_asym \
-    --output-path ~/models/qwen35-122b-hybrid-int4fp8/turboquant_kv_asym.json
+    --output-path ~/models/qwen35-397b-hybrid-int4fp8/turboquant_kv_asym.json
 
 # turboquant_q8k_tq35v — K=int8, V=TQ35 (best quality, ~2x memory)
 python patches/04-turboquant/generate_tq_metadata.py \
-    --model-dir ~/models/qwen35-122b-hybrid-int4fp8 \
+    --model-dir ~/models/qwen35-397b-hybrid-int4fp8 \
     --recipe turboquant_q8k_tq35v \
-    --output-path ~/models/qwen35-122b-hybrid-int4fp8/turboquant_kv_q8k_tq35v.json
+    --output-path ~/models/qwen35-397b-hybrid-int4fp8/turboquant_kv_q8k_tq35v.json
 
 # turboquant_q8k_tq25v — K=int8, V=TQ25 (quality + more V compression, ~2x memory)
 python patches/04-turboquant/generate_tq_metadata.py \
-    --model-dir ~/models/qwen35-122b-hybrid-int4fp8 \
+    --model-dir ~/models/qwen35-397b-hybrid-int4fp8 \
     --recipe turboquant_q8k_tq25v \
-    --output-path ~/models/qwen35-122b-hybrid-int4fp8/turboquant_kv_q8k_tq25v.json
+    --output-path ~/models/qwen35-397b-hybrid-int4fp8/turboquant_kv_q8k_tq25v.json
 
 # Step 2: Build TQ image
 docker build -t vllm-qwen35-v2-tq -f docker/Dockerfile.v2-tq .
@@ -543,61 +547,61 @@ docker build -t vllm-qwen35-v2-tq -f docker/Dockerfile.v2-tq .
 docker run -d --name vllm-qwen35-tq \
   --gpus all --net=host -v ~/models:/models \
   vllm-qwen35-v2-tq \
-  serve /models/qwen35-122b-hybrid-int4fp8 \
+  serve /models/qwen35-397b-hybrid-int4fp8 \
   --served-model-name qwen --port 8000 \
-  --max-model-len 262144 --gpu-memory-utilization 0.90 \
+  --tensor-parallel-size 2 --max-model-len 262144 --gpu-memory-utilization 0.90 \
   --reasoning-parser qwen3 \
   --kv-cache-dtype turboquant35 --enable-turboquant \
-  --turboquant-metadata-path /models/qwen35-122b-hybrid-int4fp8/turboquant_kv_tq35.json \
-  --speculative-config '{"method":"mtp","num_speculative_tokens":2}'
+  --turboquant-metadata-path /models/qwen35-397b-hybrid-int4fp8/turboquant_kv_tq35.json \
+  --speculative-config '{"method":"mtp","num_speculative_tokens":1}'
 
 # TQ25 (maximum compression)
 docker run -d --name vllm-qwen35-tq \
   --gpus all --net=host -v ~/models:/models \
   vllm-qwen35-v2-tq \
-  serve /models/qwen35-122b-hybrid-int4fp8 \
+  serve /models/qwen35-397b-hybrid-int4fp8 \
   --served-model-name qwen --port 8000 \
-  --max-model-len 262144 --gpu-memory-utilization 0.90 \
+  --tensor-parallel-size 2 --max-model-len 262144 --gpu-memory-utilization 0.90 \
   --reasoning-parser qwen3 \
   --kv-cache-dtype turboquant25 --enable-turboquant \
-  --turboquant-metadata-path /models/qwen35-122b-hybrid-int4fp8/turboquant_kv_tq25.json \
-  --speculative-config '{"method":"mtp","num_speculative_tokens":2}'
+  --turboquant-metadata-path /models/qwen35-397b-hybrid-int4fp8/turboquant_kv_tq25.json \
+  --speculative-config '{"method":"mtp","num_speculative_tokens":1}'
 
 # turboquant_asym (disjoint K/V outlier dims)
 docker run -d --name vllm-qwen35-tq \
   --gpus all --net=host -v ~/models:/models \
   vllm-qwen35-v2-tq \
-  serve /models/qwen35-122b-hybrid-int4fp8 \
+  serve /models/qwen35-397b-hybrid-int4fp8 \
   --served-model-name qwen --port 8000 \
-  --max-model-len 262144 --gpu-memory-utilization 0.90 \
+  --tensor-parallel-size 2 --max-model-len 262144 --gpu-memory-utilization 0.90 \
   --reasoning-parser qwen3 \
   --kv-cache-dtype turboquant_asym --enable-turboquant \
-  --turboquant-metadata-path /models/qwen35-122b-hybrid-int4fp8/turboquant_kv_asym.json \
-  --speculative-config '{"method":"mtp","num_speculative_tokens":2}'
+  --turboquant-metadata-path /models/qwen35-397b-hybrid-int4fp8/turboquant_kv_asym.json \
+  --speculative-config '{"method":"mtp","num_speculative_tokens":1}'
 
 # turboquant_q8k_tq35v (K=int8, V=TQ35 — best quality)
 docker run -d --name vllm-qwen35-tq \
   --gpus all --net=host -v ~/models:/models \
   vllm-qwen35-v2-tq \
-  serve /models/qwen35-122b-hybrid-int4fp8 \
+  serve /models/qwen35-397b-hybrid-int4fp8 \
   --served-model-name qwen --port 8000 \
-  --max-model-len 262144 --gpu-memory-utilization 0.90 \
+  --tensor-parallel-size 2 --max-model-len 262144 --gpu-memory-utilization 0.90 \
   --reasoning-parser qwen3 \
   --kv-cache-dtype turboquant_q8k_tq35v --enable-turboquant \
-  --turboquant-metadata-path /models/qwen35-122b-hybrid-int4fp8/turboquant_kv_q8k_tq35v.json \
-  --speculative-config '{"method":"mtp","num_speculative_tokens":2}'
+  --turboquant-metadata-path /models/qwen35-397b-hybrid-int4fp8/turboquant_kv_q8k_tq35v.json \
+  --speculative-config '{"method":"mtp","num_speculative_tokens":1}'
 
 # turboquant_q8k_tq25v (K=int8, V=TQ25 — quality + more V compression)
 docker run -d --name vllm-qwen35-tq \
   --gpus all --net=host -v ~/models:/models \
   vllm-qwen35-v2-tq \
-  serve /models/qwen35-122b-hybrid-int4fp8 \
+  serve /models/qwen35-397b-hybrid-int4fp8 \
   --served-model-name qwen --port 8000 \
-  --max-model-len 262144 --gpu-memory-utilization 0.90 \
+  --tensor-parallel-size 2 --max-model-len 262144 --gpu-memory-utilization 0.90 \
   --reasoning-parser qwen3 \
   --kv-cache-dtype turboquant_q8k_tq25v --enable-turboquant \
-  --turboquant-metadata-path /models/qwen35-122b-hybrid-int4fp8/turboquant_kv_q8k_tq25v.json \
-  --speculative-config '{"method":"mtp","num_speculative_tokens":2}'
+  --turboquant-metadata-path /models/qwen35-397b-hybrid-int4fp8/turboquant_kv_q8k_tq25v.json \
+  --speculative-config '{"method":"mtp","num_speculative_tokens":1}'
 ```
 
 > **First launch is slow (~15-20 min vs ~10 min for v2).** TQ patches modify vLLM internals at startup, and the Triton decode kernels are JIT-compiled on first run. Subsequent launches with cached Triton kernels are faster.
@@ -623,11 +627,11 @@ We tested 20+ optimization approaches across speculative decoding, quantization,
 
 ### Speculative Decoding
 
-**EAGLE-3** — *+10%, but loses to MTP-2.* EAGLE-3 requires downloading and storing separate draft model weights (~5 GB). MTP-2 uses the built-in MTP head (already in the checkpoint) and is both simpler and faster. Two patches were created for EAGLE-3 integration but ultimately abandoned since MTP-2 wins on every metric.
+**EAGLE-3** — *Loses to MTP.* EAGLE-3 requires downloading and storing separate draft model weights. MTP uses the built-in MTP head (already in the checkpoint) and is both simpler and faster. Two patches were created for EAGLE-3 integration but ultimately abandoned since MTP wins on every metric.
 
 **KnapSpec Self-Speculative** — *Skipped after analysis.* KnapSpec uses the model itself as a draft by skipping layers. Math showed it's bandwidth-inferior to MTP: the draft forward pass reads ~75% of full model weights, while the MTP head reads only 4.4%. On a bandwidth-bound system like DGX Spark, this makes KnapSpec slower than MTP by design.
 
-**MTP-1 → MTP-2** — *MTP-1 replaced, not failed.* MTP-1 (`num_speculative_tokens:1`) gave 38.4 tok/s. MTP-2 (`num_speculative_tokens:2`) gives 51 tok/s with ~80% acceptance rate on position 2. Strictly better — more tokens per step with no quality cost.
+**MTP-1** — The 397B model has only 1 MTP layer (vs 3 in 122B), so `num_speculative_tokens` is capped at 1. MTP-2 is not available for this model architecture.
 
 ### Expert-Level Optimizations
 

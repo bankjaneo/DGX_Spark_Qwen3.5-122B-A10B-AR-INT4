@@ -34,7 +34,7 @@ set -euo pipefail
 # ── Paths ─────────────────────────────────────────────────────────────────────
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SPARK_VLLM_DIR="${PROJECT_DIR}/spark-vllm-docker"
-HYBRID_DIR="${HOME}/models/qwen35-122b-hybrid-int4fp8"
+HYBRID_DIR="${HOME}/models/qwen35-397b-hybrid-int4fp8"
 SPARK_VLLM_PIN="49d6d9fefd7cd05e63af8b28e4b514e9d30d249f"
 
 # Frozen PyTorch nightly versions — these MUST be identical to what's inside
@@ -425,11 +425,12 @@ LAUNCH_CMD="docker run -d --name vllm-qwen35 \\
     serve /models/${MODEL_BASENAME} \\
     --served-model-name qwen \\
     --port 8000 \\
+    --tensor-parallel-size 2 \\
     --max-model-len 262144 \\
     --gpu-memory-utilization 0.90 \\
     --reasoning-parser qwen3 \\
     --attention-backend FLASHINFER \\
-    --speculative-config '{\"method\":\"mtp\",\"num_speculative_tokens\":2}'"
+    --speculative-config '{\"method\":\"mtp\",\"num_speculative_tokens\":1}'"
 
 # Measured on a real DGX Spark first-launch run from this exact image:
 # weights load 9m45s + compile/warmup 2m51s + graph capture/engine 29s

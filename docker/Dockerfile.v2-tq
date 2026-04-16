@@ -18,7 +18,7 @@
 #     --reasoning-parser qwen3 \
 #     --kv-cache-dtype turboquant35 --enable-turboquant \
 #     --turboquant-metadata-path /models/qwen35-397b-hybrid-int4fp8/turboquant_kv.json \
-#     --speculative-config '{"method":"mtp","num_speculative_tokens":2}'
+#     --speculative-config '{"method":"mtp","num_speculative_tokens":1}'
 
 # Base: vLLM 0.19.1 compiled for SM121 (built in Step 3 of README)
 # Tested build: 0.19.1.dev0+g2a69949bd (commit 2a69949bd, 2026-04-04)

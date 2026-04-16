@@ -18,7 +18,7 @@
 #   V is used for the weighted output sum, which averages over many heads and
 #   is more robust to noise.  Keeping K at int8 quality while compressing V
 #   with TurboQuant recovers needle-in-haystack quality to 3/3 at all context
-#   lengths (vs 0/3 with symmetric TQ35 at 200K context).
+#   lengths (vs 0/3 with symmetric TQ35 at 256K context).
 #
 # Decode path:
 #   Uses Python fallback (_fallback_turboquant_attention): dequantize K from
@@ -45,4 +45,4 @@ docker run -d --name vllm-qwen35-tq-q8k-tq35v \
   --reasoning-parser qwen3 \
   --kv-cache-dtype turboquant_q8k_tq35v --enable-turboquant \
   --turboquant-metadata-path /models/qwen35-397b-hybrid-int4fp8/turboquant_kv.json \
-  --speculative-config '{"method":"mtp","num_speculative_tokens":2}'
+  --speculative-config '{"method":"mtp","num_speculative_tokens":1}'

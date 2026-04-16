@@ -1,7 +1,7 @@
 # DGX Spark Qwen3.5-397B-A17B v2
 #
 # All-in-one: vLLM 0.19 + Hybrid INT4+FP8 + INT8 LM Head v2
-# Result: TBD tok/s on Dual DGX Spark with MTP-2
+# Result: TBD tok/s on Dual DGX Spark with MTP-1
 #
 # Tested with: vLLM 0.19.1
 # WARNING: Patches are version-specific. Newer vLLM may need re-qualification.
@@ -20,7 +20,7 @@
 #     --served-model-name qwen --port 8000 \
 #     --tensor-parallel-size 2 --max-model-len 262144 --gpu-memory-utilization 0.90 \
 #     --reasoning-parser qwen3 --attention-backend FLASHINFER \
-#     --speculative-config '{"method":"mtp","num_speculative_tokens":2}'
+#     --speculative-config '{"method":"mtp","num_speculative_tokens":1}'
 
 # Base: vLLM 0.19.1 compiled for SM121 (built in Step 3 of README)
 # Tested build: 0.19.1.dev0+g2a69949bd (commit 2a69949bd, 2026-04-04)

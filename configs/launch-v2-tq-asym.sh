@@ -24,7 +24,7 @@
 # Prerequisites:
 #   1. Generate asymmetric metadata:
 #        python patches/04-turboquant/generate_tq_metadata.py \
-#            --model-dir /path/to/models/qwen35-122b-hybrid-int4fp8 \
+#            --model-dir /path/to/models/qwen35-397b-hybrid-int4fp8 \
 #            --recipe turboquant_asym
 #   2. Build the v2-tq Docker image (Dockerfile.v2-tq).
 
@@ -32,12 +32,13 @@ docker run -d --name vllm-qwen35-tq-asym \
   --gpus all --net=host --ipc=host \
   -v /path/to/models:/models \
   vllm-qwen35-v019-v2-tq \
-  serve /models/qwen35-122b-hybrid-int4fp8 \
+  serve /models/qwen35-397b-hybrid-int4fp8 \
   --served-model-name qwen \
   --port 8000 \
+  --tensor-parallel-size 2 \
   --max-model-len 262144 \
   --gpu-memory-utilization 0.90 \
   --reasoning-parser qwen3 \
   --kv-cache-dtype turboquant_asym --enable-turboquant \
-  --turboquant-metadata-path /models/qwen35-122b-hybrid-int4fp8/turboquant_kv.json \
-  --speculative-config '{"method":"mtp","num_speculative_tokens":2}'
+  --turboquant-metadata-path /models/qwen35-397b-hybrid-int4fp8/turboquant_kv.json \
+  --speculative-config '{"method":"mtp","num_speculative_tokens":1}'

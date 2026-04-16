@@ -37,4 +37,4 @@ docker run -d --name vllm-qwen35-tq-q8k-tq25v \
   --reasoning-parser qwen3 \
   --kv-cache-dtype turboquant_q8k_tq25v --enable-turboquant \
   --turboquant-metadata-path /models/qwen35-397b-hybrid-int4fp8/turboquant_kv.json \
-  --speculative-config '{"method":"mtp","num_speculative_tokens":2}'
+  --speculative-config '{"method":"mtp","num_speculative_tokens":1}'
