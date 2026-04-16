@@ -1,6 +1,6 @@
 #!/bin/bash
 # Baseline: vLLM 0.19 + Intel AutoRound INT4 + FlashInfer
-# Result: TBD tok/s on dual DGX Spark
+# Result: 28.3 tok/s on dual DGX Spark
 #
 # Prerequisites:
 #   - vLLM Docker image compiled for SM121
@@ -13,7 +13,7 @@ sudo docker run -d --name vllm-qwen35 \
   serve Intel/Qwen3.5-397B-A17B-int4-AutoRound \
   --served-model-name qwen \
   --port 8000 \
-  --tensor-parallel-size 2 \
+  --tensor-parallel-size 1 \
   --max-model-len 32768 \
   --gpu-memory-utilization 0.90 \
   --reasoning-parser qwen3 \

@@ -19,7 +19,9 @@ from pathlib import Path
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Add MTP weights to hybrid checkpoint")
+    parser = argparse.ArgumentParser(
+        description="Add MTP weights to hybrid checkpoint"
+    )
     parser.add_argument(
         "--source",
         required=True,
@@ -45,7 +47,9 @@ def main():
     with open(source_index) as f:
         src_idx = json.load(f)
 
-    mtp_keys = {k: v for k, v in src_idx["weight_map"].items() if "mtp" in k.lower()}
+    mtp_keys = {
+        k: v for k, v in src_idx["weight_map"].items() if "mtp" in k.lower()
+    }
     print(f"Found {len(mtp_keys)} MTP tensors in source index")
 
     if not mtp_keys:

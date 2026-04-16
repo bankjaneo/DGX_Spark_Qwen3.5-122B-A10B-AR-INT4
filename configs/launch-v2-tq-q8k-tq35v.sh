@@ -6,7 +6,7 @@
 #   V slot: TQ35 payload (128 bytes) + 130 zero-pad bytes
 #   packed_dim = 258 bytes (K dominates; V zero-pads)
 #
-# Memory comparison (Qwen3.5-397B-A17B, head_size=256):
+# Memory comparison (Qwen3.5-397B, head_size=256):
 #   fp16 baseline:       512 bytes/head  (1×)
 #   Symmetric TQ35:      128 bytes/head  (4× — best memory)
 #   K=Q8 + V=TQ35:       258 bytes/head  (~2× — best quality)
@@ -18,7 +18,7 @@
 #   V is used for the weighted output sum, which averages over many heads and
 #   is more robust to noise.  Keeping K at int8 quality while compressing V
 #   with TurboQuant recovers needle-in-haystack quality to 3/3 at all context
-#   lengths (vs 0/3 with symmetric TQ35 at 256K context).
+#   lengths (vs 0/3 with symmetric TQ35 at 256k context).
 #
 # Decode path:
 #   Uses Python fallback (_fallback_turboquant_attention): dequantize K from
@@ -39,9 +39,9 @@ docker run -d --name vllm-qwen35-tq-q8k-tq35v \
   serve /models/qwen35-397b-hybrid-int4fp8 \
   --served-model-name qwen \
   --port 8000 \
-  --tensor-parallel-size 2 \
   --max-model-len 262144 \
   --gpu-memory-utilization 0.90 \
+  --tensor-parallel-size 2 \
   --reasoning-parser qwen3 \
   --kv-cache-dtype turboquant_q8k_tq35v --enable-turboquant \
   --turboquant-metadata-path /models/qwen35-397b-hybrid-int4fp8/turboquant_kv.json \

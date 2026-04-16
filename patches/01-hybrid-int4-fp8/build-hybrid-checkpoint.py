@@ -51,9 +51,7 @@ def get_fp8_non_expert_manifest(fp8_repo: str) -> dict[str, str]:
     return {k: v for k, v in wm.items() if ".experts." not in k}
 
 
-def download_fp8_shards(
-    fp8_repo: str, shards: set[str], cache_dir: Path
-) -> dict[str, Path]:
+def download_fp8_shards(fp8_repo: str, shards: set[str], cache_dir: Path) -> dict[str, Path]:
     """Download only the needed FP8 shards.
 
     Args:
@@ -73,9 +71,7 @@ def download_fp8_shards(
     return shard_paths
 
 
-def extract_fp8_tensors(
-    shard_paths: dict[str, Path], wanted: dict[str, str]
-) -> dict[str, torch.Tensor]:
+def extract_fp8_tensors(shard_paths: dict[str, Path], wanted: dict[str, str]) -> dict[str, torch.Tensor]:
     """Extract the requested FP8 tensors from downloaded shards.
 
     Args:
@@ -91,9 +87,7 @@ def extract_fp8_tensors(
         if not keys_in_shard:
             continue
 
-        logger.info(
-            "  Extracting %d tensors from %s...", len(keys_in_shard), shard_name
-        )
+        logger.info("  Extracting %d tensors from %s...", len(keys_in_shard), shard_name)
         with safe_open(str(shard_path), framework="pt") as f:
             for k in keys_in_shard:
                 tensors[k] = f.get_tensor(k)
@@ -304,10 +298,7 @@ def build_hybrid_checkpoint(
             )
 
         if expected_unplaced:
-            logger.info(
-                "  Adding %d expected unplaced FP8 scale tensors to final shard...",
-                len(expected_unplaced),
-            )
+            logger.info("  Adding %d expected unplaced FP8 scale tensors to final shard...", len(expected_unplaced))
 
         if expected_unplaced:
             # Load last shard, add expected scale tensors, re-save
@@ -337,14 +328,15 @@ def update_safetensors_index(output_dir: Path) -> None:
                 tensor = f.get_tensor(key)
                 total_size += tensor.numel() * tensor.element_size()
 
-    index = {"metadata": {"total_size": total_size}, "weight_map": weight_map}
+    index = {
+        "metadata": {"total_size": total_size},
+        "weight_map": weight_map
+    }
 
     with open(output_dir / "model.safetensors.index.json", "w", encoding="utf-8") as f:
         json.dump(index, f, indent=2, sort_keys=True)
 
-    logger.info(
-        "  Index rebuilt: %d tensors, %.2f GB", len(weight_map), total_size / 1e9
-    )
+    logger.info("  Index rebuilt: %d tensors, %.2f GB", len(weight_map), total_size / 1e9)
 
 
 def update_config(output_dir: Path) -> None:
@@ -359,14 +351,14 @@ def update_config(output_dir: Path) -> None:
 
     config["_hybrid_quant_info"] = {
         "description": "Hybrid GPTQ-INT4 + FP8 checkpoint for dual-GPU deployment",
-        "moe_experts": "GPTQ INT4 (group_size=128, sym=True, Marlin kernels, 512 experts)",
+        "moe_experts": "GPTQ INT4 (group_size=128, sym=True, Marlin kernels)",
         "dense_layers": "FP8 E4M3 block-128 (from official Qwen/Qwen3.5-397B-A17B-FP8, calibrated scales)",
         "norms_gates_embeddings": "Preserved at source dtype (BF16 for norms/gates, FP8 for others)",
         "source_gptq": "Qwen/Qwen3.5-397B-A17B-GPTQ-Int4",
         "source_fp8": "Qwen/Qwen3.5-397B-A17B-FP8",
         "vllm_patch": "https://github.com/rmstxrx/vllm/tree/v0.17.1-hybrid-fp8",
-        "target_hardware": "Dual NVIDIA DGX Spark (GB10, 256GB unified, 273 GB/s)",
-        "converter": "build-hybrid-checkpoint.py",
+        "target_hardware": "NVIDIA DGX Spark (GB10, 128GB unified, 273 GB/s)",
+        "converter": "build-hybrid-checkpoint.py"
     }
 
     with open(config_path, "w", encoding="utf-8") as f:
@@ -380,13 +372,9 @@ def main() -> int:
         Process exit code.
     """
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    parser = argparse.ArgumentParser(
-        description="Build hybrid GPTQ-INT4 + FP8 checkpoint"
-    )
+    parser = argparse.ArgumentParser(description="Build hybrid GPTQ-INT4 + FP8 checkpoint")
     parser.add_argument("--gptq-dir", required=True, help="Path to GPTQ-INT4 model")
-    parser.add_argument(
-        "--fp8-repo", default="Qwen/Qwen3.5-397B-A17B-FP8", help="HF repo for FP8 model"
-    )
+    parser.add_argument("--fp8-repo", default="Qwen/Qwen3.5-397B-A17B-FP8", help="HF repo for FP8 model")
     parser.add_argument("--output", required=True, help="Output directory")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument(

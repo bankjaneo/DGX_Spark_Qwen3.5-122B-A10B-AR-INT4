@@ -1,6 +1,6 @@
 #!/bin/bash
 # Hybrid INT4+FP8: MoE experts in INT4 (Marlin), shared expert in FP8 (CUTLASS)
-# Result: TBD tok/s on dual DGX Spark (+8.8% vs baseline)
+# Result: 30.8 tok/s on dual DGX Spark (+8.8% vs baseline)
 #
 # Prerequisites:
 #   - Hybrid checkpoint built with build-hybrid-checkpoint.py
@@ -15,7 +15,7 @@ sudo docker run -d --name vllm-qwen35 \
   serve /models/qwen35-397b-hybrid-int4fp8 \
   --served-model-name qwen \
   --port 8000 \
-  --tensor-parallel-size 2 \
+  --tensor-parallel-size 1 \
   --max-model-len 32768 \
   --gpu-memory-utilization 0.90 \
   --reasoning-parser qwen3 \

@@ -1,7 +1,7 @@
-# DGX Spark Qwen3.5-397B-A17B v2-tq: v2 + TurboQuant KV Cache (optional)
+# DGX Spark Qwen3.5-397B v2-tq: v2 + TurboQuant KV Cache (optional)
 #
 # All-in-one: vLLM 0.19 + Hybrid INT4+FP8 + INT8 LM Head v2 + TurboQuant
-# Result: TBD tok/s, but 4x more KV cache (1.4M tokens)
+# Result: TBD tok/s, 4x more KV cache via TurboQuant compression
 #
 # Tested with: vLLM 0.19.1 + mitkox/vllm-turboquant
 # WARNING: Patches are version-specific.
@@ -14,7 +14,7 @@
 #     vllm-qwen35-v2-tq \
 #     serve /models/qwen35-397b-hybrid-int4fp8 \
 #     --served-model-name qwen --port 8000 \
-#     --tensor-parallel-size 2 --max-model-len 262144 --gpu-memory-utilization 0.90 \
+#     --max-model-len 262144 --gpu-memory-utilization 0.90 --tensor-parallel-size 2 \
 #     --reasoning-parser qwen3 \
 #     --kv-cache-dtype turboquant35 --enable-turboquant \
 #     --turboquant-metadata-path /models/qwen35-397b-hybrid-int4fp8/turboquant_kv.json \

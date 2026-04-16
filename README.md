@@ -1,10 +1,7 @@
-# Qwen3.5-397B-A17B on Dual DGX Spark: TBD tok/s
+# Qwen3.5-397B-A17B on Dual DGX Spark
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
-[![Performance](https://img.shields.io/badge/tok%2Fs-TBD-brightgreen?style=flat&logo=speedtest&logoColor=white)](.)
-[![Qwen3.5-35B](https://img.shields.io/badge/Qwen3.5--35B-112_tok%2Fs-00cc44?style=flat&logo=speedtest&logoColor=white)](.)
-[![Speedup](https://img.shields.io/badge/speedup-TBD-orange?style=flat)](.)
-[![Hardware](https://img.shields.io/badge/NVIDIA-Dual%20DGX%20Spark-76B900?style=flat&logo=nvidia&logoColor=white)](https://www.nvidia.com/en-us/products/workstations/dgx-spark/)
+[![Hardware](https://img.shields.io/badge/NVIDIA-2x_DGX_Spark-76B900?style=flat&logo=nvidia&logoColor=white)](https://www.nvidia.com/en-us/products/workstations/dgx-spark/)
 [![Model](https://img.shields.io/badge/%F0%9F%A4%97-Qwen3.5--397B--A17B-yellow)](https://huggingface.co/Qwen/Qwen3.5-397B-A17B)
 [![Quantization](https://img.shields.io/badge/Quant-INT4%2BFP8_Hybrid-purple)](https://huggingface.co/Intel/Qwen3.5-397B-A17B-int4-AutoRound)
 [![INT8 LM Head](https://img.shields.io/badge/LM_Head-INT8_Triton-blueviolet?style=flat)](.)
@@ -15,28 +12,26 @@
 [![CUDA](https://img.shields.io/badge/CUDA-13.0-green?style=flat&logo=nvidia)](.)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat&logo=docker&logoColor=white)](docker/Dockerfile.v2)
 
-Optimizations for Qwen3.5-397B-A17B inference on dual NVIDIA DGX Spark (256GB unified memory), with 256K context support, no quality degradation.
+Optimizations for Qwen3.5-397B-A17B inference on **dual NVIDIA DGX Spark** (tensor parallel across 2 nodes, 256 GB total), with 256K context support, no quality degradation.
+
+> **Note:** This is adapted from the [122B-A10B single-Spark project](https://github.com/bankjaneo/DGX_Spark_Qwen3.5-122B-A10B-AR-INT4). The 397B model (~226 GB INT4) requires two DGX Sparks with `--tensor-parallel-size 2` via Ray. Performance numbers are TBD — benchmark after setup.
 
 ## Results
 
-| Configuration | tok/s | Improvement | Build |
-|---|---|---|---|
-| Baseline (vLLM 0.19 + AutoRound INT4 + FlashInfer) | **TBD** | -- | -- |
-| + Hybrid INT4+FP8 Dense Layers | **TBD** | TBD | step 1 |
-| + MTP-1 Speculative Decoding | **TBD** | TBD | step 2 |
-| **v2** (+ INT8 LM Head v2) | **TBD** | **TBD** | **`Dockerfile.v2`** |
-| v2-tq (+ TurboQuant KV Cache) | TBD | TBD | `Dockerfile.v2-tq` |
-
-The same optimizations also work with Qwen3.5-35B-A3B (same architecture, smaller): **112 tok/s**.
+| Configuration | tok/s | Build |
+|---|---|---|
+| Baseline (vLLM 0.19 + AutoRound INT4 + FlashInfer) | TBD | -- |
+| + Hybrid INT4+FP8 Dense Layers | TBD | step 1 |
+| + MTP-1 Speculative Decoding | TBD | step 2 |
+| **v2** (+ INT8 LM Head v2) | TBD | **`Dockerfile.v2`** |
+| v2-tq (+ TurboQuant KV Cache) | TBD | `Dockerfile.v2-tq` |
 
 ### 256K Context Support
 
-v2 supports 256K context on dual DGX Spark (256GB unified memory). TurboQuant recommended for multi-user scenarios.
-
-| Config | KV Cache | Concurrent Users @ 256K |
+| Config | KV Cache | Notes |
 |---|---|---|
-| v2 (standard) | TBD | TBD |
-| v2-tq (TurboQuant) | TBD | TBD |
+| v2 (standard) | TBD | 256 GB across 2 nodes |
+| v2-tq (TurboQuant) | TBD | 4x KV cache compression |
 
 ---
 
@@ -44,10 +39,10 @@ v2 supports 256K context on dual DGX Spark (256GB unified memory). TurboQuant re
 
 All optimizations are independent — pick what you need:
 
-| Path | Steps | tok/s | What you get |
-|---|---|---|---|
-| **MTP only** (easiest) | 0 → 2 → 3 → 4 → 5 | ~38 | MTP-1 + INT8 LM Head, no hybrid |
-| **Full v2** (recommended) | 0 → 1 → 2 → 3 → 4 → 5 | **51** | All optimizations |
+| Path | Steps | What you get |
+|---|---|---|
+| **MTP only** (easiest) | 0 → 2 → 3 → 4 → 5 | MTP-1 + INT8 LM Head, no hybrid |
+| **Full v2** (recommended) | 0 → 1 → 2 → 3 → 4 → 5 | All optimizations |
 
 ### Automated install (TL;DR)
 
@@ -123,11 +118,11 @@ python patches/01-hybrid-int4-fp8/build-hybrid-checkpoint.py \
     --force
 ```
 
-Takes ~30 minutes. Output: ~220 GB. If you skip this step, use `$INTEL_DIR` as your model path in step 2 and 4.
+Takes ~40 minutes. Output: ~220 GB. If you skip this step, use `$INTEL_DIR` as your model path in step 2 and 4.
 
 ### Step 2: Add MTP weights
 
-Intel AutoRound ships `model_extra_tensors.safetensors` (5 GB, 785 MTP tensors) but **does not list them** in `model.safetensors.index.json`. The file is physically present, but vLLM reads the index to discover weights — so it never sees the MTP head. This script copies the file (if needed) and **adds the MTP tensor mappings to the index**, so vLLM loads them for speculative decoding.
+Intel AutoRound ships `model_extra_tensors.safetensors` with MTP tensors but **does not list them** in `model.safetensors.index.json`. The file is physically present, but vLLM reads the index to discover weights — so it never sees the MTP head. This script copies the file (if needed) and **adds the MTP tensor mappings to the index**, so vLLM loads them for speculative decoding.
 
 > **Note:** Qwen3.5-397B-A17B has 1 MTP layer (vs 3 in the 122B model), so `num_speculative_tokens` is capped at 1.
 
@@ -191,9 +186,18 @@ This takes 30-60 minutes (compiles PyTorch + FlashInfer + Triton for SM121).
 docker build -t vllm-qwen35-v2 -f docker/Dockerfile.v2 .
 ```
 
-### Step 5: Launch
+### Step 5: Launch (Dual DGX Spark with Ray)
+
+The 397B model requires tensor parallelism across 2 DGX Spark nodes. Set up a Ray cluster first, then launch vLLM:
 
 ```bash
+# On head node:
+ray start --head --port=6379
+
+# On worker node:
+ray start --address='<head-ip>:6379'
+
+# Then launch vLLM on head node:
 docker run -d --name vllm-qwen35 \
   --gpus all --net=host --ipc=host \
   -v ~/models:/models \
@@ -201,17 +205,19 @@ docker run -d --name vllm-qwen35 \
   serve /models/qwen35-397b-hybrid-int4fp8 \
   --served-model-name qwen \
   --port 8000 \
-  --tensor-parallel-size 2 \
   --max-model-len 262144 \
   --gpu-memory-utilization 0.90 \
+  --tensor-parallel-size 2 \
   --reasoning-parser qwen3 \
   --attention-backend FLASHINFER \
   --speculative-config '{"method":"mtp","num_speculative_tokens":1}'
 ```
 
 > If you skipped step 1, replace the model path with your Intel AutoRound directory.
+>
+> **Note:** Ray cluster configuration depends on your network setup. See [vLLM distributed inference docs](https://docs.vllm.ai/en/latest/serving/distributed_serving.html) for details.
 
-Wait ~10 minutes for loading + warmup. Then:
+Wait ~15-20 minutes for loading + warmup across both nodes. Then:
 
 ```bash
 curl localhost:8000/health
@@ -226,7 +232,7 @@ curl http://localhost:8000/v1/chat/completions \
 ./bench_qwen35.sh "v2"
 ```
 
-Expected: ~38 tok/s with hybrid, ~28 tok/s without hybrid (Run 2; Run 1 is JIT warmup).
+Performance numbers TBD — benchmark after your dual-Spark setup is running (Run 2; Run 1 is JIT warmup).
 
 ### Running in Production
 
@@ -289,7 +295,7 @@ Notable flags in this example:
 | `qwen3_xml` | `<tool_call>{"name": "fn", "arguments": {...}}</tool_call>` (JSON in XML tags) | **Qwen3.5-\***, Qwen3-\*-Instruct |
 | `qwen3_coder` | `<tool_call><function=fn><parameter=x>val</parameter></function></tool_call>` (custom XML) | Qwen3-Coder-\* |
 
-For Qwen3.5-397B-A17B (this project), use `--tool-call-parser qwen3_xml`. The example above uses `qwen3_coder` which also works but is designed for Coder-series models.
+For Qwen3.5-397B (this project), use `--tool-call-parser qwen3_xml`. The example above uses `qwen3_coder` which also works but is designed for Coder-series models.
 
 > **Known issue (vLLM 0.19):** When `--reasoning-parser qwen3` and `--tool-call-parser` are both active, tool calls emitted inside `<think>` blocks may be silently dropped in non-streaming mode ([vllm#39056](https://github.com/vllm-project/vllm/issues/39056)).
 
@@ -301,21 +307,22 @@ For Qwen3.5-397B-A17B (this project), use `--tool-call-parser qwen3_xml`. The ex
 | Garbage output | Ensure patched image, not vanilla vLLM |
 | OOM at startup | Lower `--gpu-memory-utilization` to 0.85 |
 | `content: null` | Normal for thinking models. Response is in `reasoning` field. |
-| Only ~28 tok/s | Check `--speculative-config` has `num_speculative_tokens:1` |
+| Low tok/s | Check `--speculative-config` has `num_speculative_tokens:1` and `--tensor-parallel-size 2` |
 | Stale Triton cache after rebuild | `docker exec <name> rm -rf /root/.cache/triton` and restart |
 | MTP doesn't work with PyTorch backend | MTP requires FlashInfer backend (`--attention-backend FLASHINFER`). PyTorch backend is not supported. Also check vLLM version — MTP had bugs in pre-0.19 versions ([#36843](https://github.com/vllm-project/vllm/issues/36843), [#36917](https://github.com/vllm-project/vllm/issues/36917)). |
-| Multi-node / Ray cluster issues | This project is tested on a **single DGX Spark only**. Multi-node setups (Ray, 2x Spark) have different requirements and are not covered here. Community reports suggest up to 56 tok/s on 2x Spark with Ray, but cluster configuration is outside our scope. |
-| 408 "unexpected unmatched FP8 tensor" warnings during checkpoint build | **Normal.** These are DeltaNet linear_attn projections (36 of 48 layers) plus some attention norms/gates. They exist in the Qwen FP8 checkpoint but have no matching counterparts in Intel AutoRound INT4 (different naming conventions). The script only replaces shared_expert dense layers (144 tensors) with FP8 — everything else stays in its original format. Use `--force` to proceed. |
+| Multi-node / Ray cluster issues | This project requires **dual DGX Spark** with Ray for tensor parallelism. See [vLLM distributed serving docs](https://docs.vllm.ai/en/latest/serving/distributed_serving.html) for Ray cluster setup. |
+| "unexpected unmatched FP8 tensor" warnings during checkpoint build | **Normal.** These are DeltaNet linear_attn projections (45 of 60 layers) plus some attention norms/gates. They exist in the Qwen FP8 checkpoint but have no matching counterparts in Intel AutoRound INT4 (different naming conventions). The script only replaces shared_expert dense layers (144 tensors) with FP8 — everything else stays in its original format. Use `--force` to proceed. |
 
 ---
 
 ## Hardware
 
-- **System:** NVIDIA DGX Spark (ASUS Ascent GX10)
-- **GPU:** NVIDIA GB10 (Blackwell, SM121)
-- **Memory:** 128 GB unified CPU-GPU (LPDDR5x, 273 GB/s)
+- **System:** 2x NVIDIA DGX Spark (ASUS Ascent GX10) with Ray cluster
+- **GPU:** 2x NVIDIA GB10 (Blackwell, SM121)
+- **Memory:** 256 GB total (128 GB unified CPU-GPU per node, LPDDR5x, 273 GB/s each)
 - **CUDA:** 13.0
 - **Architecture:** aarch64 (ARM Grace CPU)
+- **Interconnect:** Network-based (Ray tensor parallelism)
 
 ## Tested Environment
 
@@ -339,8 +346,9 @@ These exact versions were used for all benchmarks. Mismatched versions may cause
 
 ## Prerequisites
 
-- vLLM 0.19.1 Docker image compiled for SM121 (see versions above)
-- [Intel/Qwen3.5-397B-A17B-int4-AutoRound](https://huggingface.co/Intel/Qwen3.5-397B-A17B-int4-AutoRound)
+- 2x NVIDIA DGX Spark with Ray cluster configured for tensor parallelism
+- vLLM 0.19.1 Docker image compiled for SM121 (see versions above) on both nodes
+- [Intel/Qwen3.5-397B-A17B-int4-AutoRound](https://huggingface.co/Intel/Qwen3.5-397B-A17B-int4-AutoRound) (~226 GB, 40 shards)
 - [Qwen/Qwen3.5-397B-A17B-FP8](https://huggingface.co/Qwen/Qwen3.5-397B-A17B-FP8) (FP8 source for dense layers, optional if skipping hybrid)
 
 ### Building vLLM 0.19 for SM121 (DGX Spark)
@@ -379,7 +387,7 @@ The base CUDA image should be `nvidia/cuda:13.2.0-devel-ubuntu24.04` (aarch64). 
 
 ### Optimization 1: FlashInfer Attention Backend
 
-**Effect:** 24.0 → 28.3 tok/s (+16%)
+**Effect:** TBD (tested on 122B: +16%)
 
 vLLM defaults to `FLASH_ATTN` on SM121. FlashInfer has optimized kernels that better utilize the Blackwell memory hierarchy. One flag, +16% free.
 
@@ -389,21 +397,21 @@ vLLM defaults to `FLASH_ATTN` on SM121. FlashInfer has optimized kernels that be
 
 ### Optimization 2: Hybrid INT4+FP8 Dense Layers
 
-**Effect:** 28.3 → 30.8 tok/s (+8.8%)
+**Effect:** TBD (tested on 122B: +8.8%)
 
-MoE expert weights stay in INT4 (Marlin). Shared expert weights replaced with FP8 from the official Qwen FP8 checkpoint, using native SM121 CUTLASS FP8 block-128 kernels.
+MoE expert weights stay in INT4 (Marlin). Shared expert MLP weights replaced with FP8 from the official Qwen FP8 checkpoint, using native SM121 CUTLASS FP8 block-128 kernels.
 
 The patch (`patches/01-hybrid-int4-fp8/inc.py`) fixes a bug where shared expert layers (marked as 16-bit by AutoRound) loaded FP8 weights without scale tensors.
 
 ### Optimization 3: MTP-1 Speculative Decoding
 
-**Effect:** TBD tok/s
+**Effect:** TBD
 
 Qwen3.5-397B-A17B ships with a native MTP head (1 MTP layer) in BF16. MTP-1 (`num_speculative_tokens:1`) predicts 1 additional token per step.
 
 > **Note:** The 397B model has only 1 MTP layer (vs 3 in 122B), so `num_speculative_tokens` is capped at 1. MTP-2 is not available for this model.
 
-The MTP weights live in `model_extra_tensors.safetensors` in the Intel AutoRound checkpoint but are missing from the model index. The script `add-mtp-weights.py` registers all 785 tensors.
+The MTP weights live in `model_extra_tensors.safetensors` in the Intel AutoRound checkpoint but are missing from the model index. The script `add-mtp-weights.py` registers the MTP tensors.
 
 > **FAQ:** *Can I use MTP without the hybrid checkpoint?* Yes. `add-mtp-weights.py` only copies `model_extra_tensors.safetensors` and updates the index — it works on any Qwen3.5 checkpoint (INT4, FP8, or hybrid). The hybrid patch (step 1) and MTP (step 2) are independent optimizations.
 >
@@ -411,9 +419,9 @@ The MTP weights live in `model_extra_tensors.safetensors` in the Intel AutoRound
 
 ### Optimization 4: INT8 LM Head v2
 
-**Effect:** TBD tok/s
+**Effect:** TBD (tested on 122B: +33%)
 
-The LM Head (248K × 4096 = 1 GB) is the single largest BF16 bottleneck in the decode step. The v2 shared-weight Triton GEMV kernel:
+The LM Head (248K × 4096 = 972 MB) is the single largest BF16 bottleneck in the decode step. The v2 shared-weight Triton GEMV kernel:
 
 1. **Quantizes BF16 → INT8 at runtime** (per-channel, no calibration needed)
 2. **Single kernel launch** reads the 729 MB weight matrix ONCE per batch, regardless of batch size (the v1 kernel launched N times for N tokens)
@@ -425,7 +433,7 @@ No quality degradation: INT8 per-channel quantization of the output layer preser
 
 ## Optional: TurboQuant KV Cache Compression
 
-[TurboQuant](https://research.google/blog/turboquant-redefining-ai-efficiency-with-extreme-compression/) (Google, ICLR 2026) compresses the KV cache from bf16 to ~3.5 bits per element, giving **4x more KV cache capacity** (1.4M tokens vs 355K) at the cost of **-22% generation speed** (39 vs 51 tok/s).
+[TurboQuant](https://research.google/blog/turboquant-redefining-ai-efficiency-with-extreme-compression/) (Google, ICLR 2026) compresses the KV cache from bf16 to ~3.5 bits per element, giving **4x more KV cache capacity** at the cost of reduced generation speed (tested on 122B: -22%).
 
 ### How it works
 
@@ -549,7 +557,7 @@ docker run -d --name vllm-qwen35-tq \
   vllm-qwen35-v2-tq \
   serve /models/qwen35-397b-hybrid-int4fp8 \
   --served-model-name qwen --port 8000 \
-  --tensor-parallel-size 2 --max-model-len 262144 --gpu-memory-utilization 0.90 \
+  --max-model-len 262144 --gpu-memory-utilization 0.90 --tensor-parallel-size 2 \
   --reasoning-parser qwen3 \
   --kv-cache-dtype turboquant35 --enable-turboquant \
   --turboquant-metadata-path /models/qwen35-397b-hybrid-int4fp8/turboquant_kv_tq35.json \
@@ -561,7 +569,7 @@ docker run -d --name vllm-qwen35-tq \
   vllm-qwen35-v2-tq \
   serve /models/qwen35-397b-hybrid-int4fp8 \
   --served-model-name qwen --port 8000 \
-  --tensor-parallel-size 2 --max-model-len 262144 --gpu-memory-utilization 0.90 \
+  --max-model-len 262144 --gpu-memory-utilization 0.90 --tensor-parallel-size 2 \
   --reasoning-parser qwen3 \
   --kv-cache-dtype turboquant25 --enable-turboquant \
   --turboquant-metadata-path /models/qwen35-397b-hybrid-int4fp8/turboquant_kv_tq25.json \
@@ -573,7 +581,7 @@ docker run -d --name vllm-qwen35-tq \
   vllm-qwen35-v2-tq \
   serve /models/qwen35-397b-hybrid-int4fp8 \
   --served-model-name qwen --port 8000 \
-  --tensor-parallel-size 2 --max-model-len 262144 --gpu-memory-utilization 0.90 \
+  --max-model-len 262144 --gpu-memory-utilization 0.90 --tensor-parallel-size 2 \
   --reasoning-parser qwen3 \
   --kv-cache-dtype turboquant_asym --enable-turboquant \
   --turboquant-metadata-path /models/qwen35-397b-hybrid-int4fp8/turboquant_kv_asym.json \
@@ -585,7 +593,7 @@ docker run -d --name vllm-qwen35-tq \
   vllm-qwen35-v2-tq \
   serve /models/qwen35-397b-hybrid-int4fp8 \
   --served-model-name qwen --port 8000 \
-  --tensor-parallel-size 2 --max-model-len 262144 --gpu-memory-utilization 0.90 \
+  --max-model-len 262144 --gpu-memory-utilization 0.90 --tensor-parallel-size 2 \
   --reasoning-parser qwen3 \
   --kv-cache-dtype turboquant_q8k_tq35v --enable-turboquant \
   --turboquant-metadata-path /models/qwen35-397b-hybrid-int4fp8/turboquant_kv_q8k_tq35v.json \
@@ -597,7 +605,7 @@ docker run -d --name vllm-qwen35-tq \
   vllm-qwen35-v2-tq \
   serve /models/qwen35-397b-hybrid-int4fp8 \
   --served-model-name qwen --port 8000 \
-  --tensor-parallel-size 2 --max-model-len 262144 --gpu-memory-utilization 0.90 \
+  --max-model-len 262144 --gpu-memory-utilization 0.90 --tensor-parallel-size 2 \
   --reasoning-parser qwen3 \
   --kv-cache-dtype turboquant_q8k_tq25v --enable-turboquant \
   --turboquant-metadata-path /models/qwen35-397b-hybrid-int4fp8/turboquant_kv_q8k_tq25v.json \
@@ -612,12 +620,14 @@ docker run -d --name vllm-qwen35-tq \
 
 ### TQ Benchmarks
 
-| Config | tok/s | KV Cache | Concurrent @ 256K | Memory/head | Notes |
-|---|---|---|---|---|---|
-| v2 (standard) | **51** | 355K | 1 | 512B (fp16) | Baseline |
-| v2-tq (TQ35) | 39 (-22%) | 1.4M | 5 | 128B | Best memory efficiency |
-| v2-tq-asym | ~39 | 1.4M | 5 | 128B | Better long-context retrieval |
-| v2-tq-q8k-tq35v | ~35 (-31%) | ~700K | ~3 | 258B | Best quality, 2× memory |
+> Performance numbers for 397B on dual DGX Spark are TBD. Memory/head values are architecture-independent.
+
+| Config | tok/s | Memory/head | Notes |
+|---|---|---|---|
+| v2 (standard) | TBD | 512B (fp16) | Baseline |
+| v2-tq (TQ35) | TBD | 128B | Best memory efficiency |
+| v2-tq-asym | TBD | 128B | Better long-context retrieval |
+| v2-tq-q8k-tq35v | TBD | 258B | Best quality, 2x memory |
 
 ---
 
@@ -635,9 +645,9 @@ We tested 20+ optimization approaches across speculative decoding, quantization,
 
 ### Expert-Level Optimizations
 
-**SERE Expert Re-routing** — *0% improvement.* SERE re-routes tokens from underutilized experts to similar popular ones. But Qwen3.5's 256 experts are extremely specialized — pairwise similarity is only ~0.02 (max 0.08). SERE needs coarser MoE architectures (8-16 experts) where redundancy exists.
+**SERE Expert Re-routing** — *0% improvement.* SERE re-routes tokens from underutilized experts to similar popular ones. But Qwen3.5's 512 experts are extremely specialized — pairwise similarity is only ~0.02 (max 0.08). SERE needs coarser MoE architectures (8-16 experts) where redundancy exists.
 
-**MoE Expert Pruning (MoE-Spec)** — *Skipped.* Since SERE proved all 256 experts are unique, pruning any of them would degrade quality. No intra-expert redundancy to exploit.
+**MoE Expert Pruning (MoE-Spec)** — *Skipped.* Since SERE proved all 512 experts are unique, pruning any of them would degrade quality. No intra-expert redundancy to exploit.
 
 **2:4 Structured Sparsity** — *Skipped.* Expert FFN hidden size is only 512. Too small for structured pruning patterns (2:4 needs meaningful redundancy within weight matrices). Same conclusion as SERE/MoE-Spec: quality is sacred.
 
@@ -661,7 +671,7 @@ We tested 20+ optimization approaches across speculative decoding, quantization,
 
 **Native SM121 FP4 CUTLASS** — *Not possible.* SM121 (consumer Blackwell) does NOT have WGMMA or `tcgen05.mma` tensor core instructions — those are datacenter-only (SM100/SM103). SM121 uses the same `mma.sync` as SM80 Ampere. The "3.65x speedup" reported on NVIDIA forums was on datacenter Blackwell, not DGX Spark.
 
-**MARLIN_USE_ATOMIC_ADD** — *0% on single GPU.* `VLLM_MARLIN_USE_ATOMIC_ADD=1` is designed for multi-GPU tensor parallel. No effect on single-GPU SM121.
+**MARLIN_USE_ATOMIC_ADD** — `VLLM_MARLIN_USE_ATOMIC_ADD=1` is designed for multi-GPU tensor parallel. May be worth re-testing with the dual-Spark setup.
 
 ### System / Runtime
 
@@ -682,16 +692,14 @@ We tested 20+ optimization approaches across speculative decoding, quantization,
 
 ---
 
-## Competitive Landscape (April 2026)
+## Competitive Landscape
 
-| Setup | tok/s | vs Ours |
+> Performance numbers for the 397B model on dual DGX Spark are TBD. The table below is from the 122B single-Spark project for reference.
+
+| Setup (122B reference) | tok/s | Notes |
 |---|---|---|
-| **This work (v2)** | **51** | -- |
-| Previous best (v1, MTP-1 + Hybrid) | 38.4 | -25% |
-| Intel AutoRound INT4 (vLLM, FlashInfer) | 28.3 | -45% |
-| llama.cpp GGUF Q5_K | 23.0 | -55% |
-| NVFP4 RedHatAI (vLLM) | 16.6 | -67% |
-| Official Qwen GPTQ-Int4 (vLLM) | 15.0 | -71% |
+| 122B v2 (single Spark) | 51 | Reference from 122B project |
+| 122B baseline (single Spark) | 28.3 | Intel AutoRound INT4 + FlashInfer |
 
 ---
 
@@ -732,10 +740,10 @@ We tested 20+ optimization approaches across speculative decoding, quantization,
 │   ├── Dockerfile.v2                        # Main: vLLM + hybrid + INT8 LM Head (baked in)
 │   └── Dockerfile.v2-tq                     # Optional: + TurboQuant (baked in)
 └── configs/
-    ├── launch-baseline.sh                   # 28.3 tok/s (reference)
-    ├── launch-hybrid.sh                     # 30.8 tok/s (hybrid only)
-    ├── launch-v2.sh                         # 51 tok/s (production)
-    └── launch-v2-tq.sh                     # 39 tok/s (TQ variant)
+    ├── launch-baseline.sh                   # Baseline (reference)
+    ├── launch-hybrid.sh                     # Hybrid only
+    ├── launch-v2.sh                         # Production (v2)
+    └── launch-v2-tq.sh                     # TQ variant
 ```
 
 ## Acknowledgments

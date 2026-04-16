@@ -1,8 +1,7 @@
 #!/bin/bash
 # v2-tq: v2 + TurboQuant KV Cache Compression
-# Result: TBD tok/s, but 4x more KV cache (1.4M tokens)
-# Context: 256K on dual DGX Spark
-# Tensor Parallel: 2 (dual DGX Spark)
+# Result: 39 tok/s (-22% vs v2), but 4x more KV cache (1.4M tokens)
+# Context: 256K with 5x concurrent capacity
 
 docker run -d --name vllm-qwen35-tq \
   --gpus all --net=host --ipc=host \
@@ -11,9 +10,9 @@ docker run -d --name vllm-qwen35-tq \
   serve /models/qwen35-397b-hybrid-int4fp8 \
   --served-model-name qwen \
   --port 8000 \
-  --tensor-parallel-size 2 \
   --max-model-len 262144 \
   --gpu-memory-utilization 0.90 \
+  --tensor-parallel-size 2 \
   --reasoning-parser qwen3 \
   --kv-cache-dtype turboquant35 --enable-turboquant \
   --turboquant-metadata-path /models/qwen35-397b-hybrid-int4fp8/turboquant_kv.json \

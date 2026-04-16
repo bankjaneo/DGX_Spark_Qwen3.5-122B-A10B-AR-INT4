@@ -1,7 +1,7 @@
-# DGX Spark Qwen3.5-397B-A17B v2
+# DGX Spark Qwen3.5-397B v2
 #
 # All-in-one: vLLM 0.19 + Hybrid INT4+FP8 + INT8 LM Head v2
-# Result: TBD tok/s on Dual DGX Spark with MTP-1
+# Result: TBD tok/s on dual DGX Spark with MTP-1 (vs baseline)
 #
 # Tested with: vLLM 0.19.1
 # WARNING: Patches are version-specific. Newer vLLM may need re-qualification.
@@ -13,12 +13,12 @@
 # Build:
 #   docker build -t vllm-qwen35-v2 -f docker/Dockerfile.v2 .
 #
-# Run (256K context, dual DGX Spark):
+# Run (256K context, TBD tok/s):
 #   docker run --gpus all --net=host -v ~/models:/models \
 #     vllm-qwen35-v2 \
 #     serve /models/qwen35-397b-hybrid-int4fp8 \
 #     --served-model-name qwen --port 8000 \
-#     --tensor-parallel-size 2 --max-model-len 262144 --gpu-memory-utilization 0.90 \
+#     --max-model-len 262144 --gpu-memory-utilization 0.90 --tensor-parallel-size 2 \
 #     --reasoning-parser qwen3 --attention-backend FLASHINFER \
 #     --speculative-config '{"method":"mtp","num_speculative_tokens":1}'
 
